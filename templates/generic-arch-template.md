@@ -59,6 +59,10 @@ config:
     htmlLabels: false
 ---
 flowchart BT
+
+    docFlowChart
+    click docFlowChart "https://docs.mermaidchart.com/mermaid-oss/syntax/flowchart.html"
+
     subgraph ewonEth [🖴 Ewon Ethernet]
         ewonLan([🔌 LAN])
         ewonWan([🔌 WAN])
@@ -74,6 +78,7 @@ flowchart BT
 
     e1@{ animation: fast }
     e2@{ animation: fast }
+
 
     %% click myPortal3E callback "Tooltip"
     click myPortal3E "https://v2.myclauger.com/" "This is a tooltip for a link"
