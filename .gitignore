@@ -1,16 +1,40 @@
-# Node rules:
-## Grunt intermediate storage (http://gruntjs.com/creating-plugins#storing-task-files)
-.grunt
+# ---- Systèmes / éditeurs ----
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.bak
+*.tmp
 
-## Dependency directory
-## Commenting this out is preferred by some people, see
-## https://docs.npmjs.com/misc/faq#should-i-check-my-node_modules-folder-into-git
-node_modules
+# ---- Visual Studio Code ----
+.vscode/
+.history/
 
-# Book build output
-_book
+# ---- Python (si tu ajoutes scripts d’export) ----
+__pycache__/
+*.py[cod]
+*.egg
+*.egg-info/
+dist/
+build/
 
-# eBook build output
-*.epub
-*.mobi
+# ---- Node / JS (si tu ajoutes outils Mermaid CLI) ----
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ---- Exports / Générés ----
 *.pdf
+*.pptx
+*.png
+*.svg
+*.jpeg
+*.jpg
+*.gif
+*.zip
+*.tar.gz
+
+# ---- OS cache ----
+ehthumbs.db
+Icon?
