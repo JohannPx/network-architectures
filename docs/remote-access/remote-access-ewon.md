@@ -2,6 +2,14 @@
 
 ## Architecture
 
+<style>
+  .rightTitle .cluster-label {
+    text-anchor: end !important;
+    transform: translateX(35%) translateY(5px) !important;
+    font-weight: bold !important;
+  }
+</style>
+
 ```mermaid
 flowchart BT
 
@@ -36,6 +44,12 @@ flowchart BT
     
     linkStyle 0 stroke:orange,stroke-width:3px,color:orange;
     linkStyle 1 stroke:orange,stroke-width:3px,color:orange;
+
+    style ewon fill:orange,stroke:#333,stroke-width:1px
+    style automation fill:green,stroke:#333,stroke-width:1px
+
+    class automation rightTitle
+    class ewon rightTitle
 ```
 
 ### Légende

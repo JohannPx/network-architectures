@@ -23,10 +23,9 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install Mermaid CLI and PDF tool
+      - name: Install Mermaid CLI
         run: |
           npm i -g @mermaid-js/mermaid-cli@10
-          npm i -g md-to-pdf@5
           sudo apt-get update
           # Polices pour bon rendu (dont emojis)
           sudo apt-get install -y fonts-noto fonts-noto-color-emoji
@@ -95,22 +94,21 @@ jobs:
 
       - name: Extract Mermaid blocks to PNG and rewrite MD
         run: python3 scripts/extract_mermaid_and_replace.py
-        
-      - name: Build consolidated PDF
+
+      - name: Install pandoc
         run: |
-          # Concatène tous les MD traités en un seul document
+          sudo apt-get update
+          sudo apt-get install -y pandoc fonts-noto fonts-noto-color-emoji
+
+      - name: Build consolidated PDF with pandoc
+        run: |
           echo "# Network Architectures – Remote Access\n" > build/Consolidated.md
           find build/md_processed -name "*.md" | sort >> build/filelist.txt
           while read f; do
             echo -e "\n\n---\n" >> build/Consolidated.md
             cat "$f" >> build/Consolidated.md
           done < build/filelist.txt
-
-          # Génère le PDF (md-to-pdf écrit build/Consolidated.pdf)
-          md-to-pdf build/Consolidated.md
-
-          # Renomme le PDF final
-          mv build/Consolidated.pdf build/Remote-Access-Architectures.pdf
+          pandoc build/Consolidated.md -o build/Remote-Access-Architectures.pdf
 
       - name: Zip PNG exports
         run: |
