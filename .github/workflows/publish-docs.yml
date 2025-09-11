@@ -1,0 +1,129 @@
+# .github/workflows/publish-docs.yml
+name: Build & Release diagrams
+
+on:
+  push:
+    branches:
+      - main
+      - draft
+
+permissions:
+  contents: write  # nécessaire pour créer une Release
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Mermaid CLI and PDF tool
+        run: |
+          npm i -g @mermaid-js/mermaid-cli@10
+          npm i -g md-to-pdf@5
+          sudo apt-get update
+          # Polices pour bon rendu (dont emojis)
+          sudo apt-get install -y fonts-noto fonts-noto-color-emoji
+
+      - name: Prepare folders
+        run: |
+          mkdir -p build/md_processed
+          mkdir -p exports/png
+          mkdir -p scripts
+
+      - name: Add extractor script
+        shell: bash
+        run: |
+          cat > scripts/extract_mermaid_and_replace.py << 'PY'
+          import re, os, sys, subprocess, pathlib, shutil
+
+          SRC_DIRS = ["docs"]
+          PNG_DIR = pathlib.Path("exports/png")
+          OUT_DIR = pathlib.Path("build/md_processed")
+
+          mermaid_block = re.compile(r"```mermaid\\s*(.*?)\\s*```", re.DOTALL | re.IGNORECASE)
+
+          def render_mermaid_to_png(mmd_text, out_png):
+              tmp_mmd = out_png.with_suffix(".mmd")
+              tmp_mmd.write_text(mmd_text, encoding="utf-8")
+              try:
+                  subprocess.run(
+                      ["mmdc", "-i", str(tmp_mmd), "-o", str(out_png), "--puppeteerConfigFile", "scripts/puppeteer.json"],
+                      check=True
+                  )
+              except FileNotFoundError:
+                  # fallback sans config
+                  subprocess.run(["mmdc", "-i", str(tmp_mmd), "-o", str(out_png)], check=True)
+              finally:
+                  tmp_mmd.unlink(missing_ok=True)
+
+          def process_md(md_path):
+              rel = pathlib.Path(md_path).relative_to(".")
+              text = pathlib.Path(md_path).read_text(encoding="utf-8")
+
+              idx = 0
+              def repl(match):
+                  nonlocal idx
+                  code = match.group(1).strip()
+                  stem = rel.as_posix().replace("/", "_").replace(".md", "")
+                  png_name = f"{stem}_m{idx}.png"
+                  out_png = PNG_DIR / png_name
+                  out_png.parent.mkdir(parents=True, exist_ok=True)
+                  render_mermaid_to_png(code, out_png)
+                  idx += 1
+                  return f"![](../../exports/png/{png_name})"
+
+              new_text = mermaid_block.sub(repl, text)
+
+              out_file = OUT_DIR / rel
+              out_file.parent.mkdir(parents=True, exist_ok=True)
+              out_file.write_text(new_text, encoding="utf-8")
+
+          # Puppeteer config (for sandbox)
+          pathlib.Path("scripts/puppeteer.json").write_text('{"args": ["--no-sandbox","--disable-setuid-sandbox"]}')
+
+          for root in SRC_DIRS:
+              for p in pathlib.Path(root).rglob("*.md"):
+                  process_md(str(p))
+          PY
+
+      - name: Extract Mermaid blocks to PNG and rewrite MD
+        run: python3 scripts/extract_mermaid_and_replace.py
+
+      - name: Build consolidated PDF
+        run: |
+          # Concatène tous les MD traités en un seul document
+          echo "# Network Architectures – Remote Access\n" > build/Consolidated.md
+          # Ajuste l’ordre si tu veux (ici : tous les MD)
+          find build/md_processed -name "*.md" | sort >> build/filelist.txt
+          while read f; do
+            echo -e "\n\n---\n" >> build/Consolidated.md
+            cat "$f" >> build/Consolidated.md
+          done < build/filelist.txt
+          # Convertit en PDF (Puppeteer/Chromium via md-to-pdf)
+          md-to-pdf build/Consolidated.md --output build/Remote-Access-Architectures.pdf
+
+      - name: Zip PNG exports
+        run: |
+          cd exports
+          zip -r ../build/diagrams-png.zip png
+          cd ..
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: auto-${{ github.run_number }}
+          name: "Auto Release ${{ github.run_number }}"
+          draft: false
+          prerelease: true
+          files: |
+            build/Remote-Access-Architectures.pdf
+            build/diagrams-png.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
