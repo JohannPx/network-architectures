@@ -95,11 +95,11 @@ jobs:
       - name: Extract Mermaid blocks to PNG and rewrite MD
         run: python3 scripts/extract_mermaid_and_replace.py
 
-      - name: Install pandoc
+      - name: Install pandoc and LaTeX
         run: |
-          sudo apt-get update
-          sudo apt-get install -y pandoc fonts-noto fonts-noto-color-emoji
-
+            sudo apt-get update
+            sudo apt-get install -y pandoc texlive-latex-base texlive-fonts-recommended texlive-latex-extra fonts-noto fonts-noto-color-emoji
+            
       - name: Build consolidated PDF with pandoc
         run: |
           echo "# Network Architectures – Remote Access\n" > build/Consolidated.md
