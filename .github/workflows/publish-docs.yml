@@ -95,19 +95,22 @@ jobs:
 
       - name: Extract Mermaid blocks to PNG and rewrite MD
         run: python3 scripts/extract_mermaid_and_replace.py
-
+        
       - name: Build consolidated PDF
         run: |
           # Concatène tous les MD traités en un seul document
           echo "# Network Architectures – Remote Access\n" > build/Consolidated.md
-          # Ajuste l’ordre si tu veux (ici : tous les MD)
           find build/md_processed -name "*.md" | sort >> build/filelist.txt
           while read f; do
             echo -e "\n\n---\n" >> build/Consolidated.md
             cat "$f" >> build/Consolidated.md
           done < build/filelist.txt
-          # Convertit en PDF (Puppeteer/Chromium via md-to-pdf)
-          md-to-pdf build/Consolidated.md --output build/Remote-Access-Architectures.pdf
+
+          # Génère le PDF (md-to-pdf écrit build/Consolidated.pdf)
+          md-to-pdf build/Consolidated.md
+
+          # Renomme le PDF final
+          mv build/Consolidated.pdf build/Remote-Access-Architectures.pdf
 
       - name: Zip PNG exports
         run: |
