@@ -12,7 +12,7 @@ flowchart TB
     subgraph site [🏭 Site client]
         fw(🛡️ Pare-feu 🧱)
         vlan@{ shape: das, label: "VLAN dédié" }
-        jumpServer([🖥️ Serveur/poste
+        jumpServer([🖥️ Poste
         de rebond])
         subgraph automation [🖲️ Automatisme]
             direction RL
@@ -28,11 +28,21 @@ flowchart TB
     internet e1@== 🔒 VPN ==> fw
     e1@{ animation: fast }
 
-    fw === vlan
-    fw === jumpServer
-    jumpServer === automation
-    vlan === automation
+    fw e3@=== vlan
+    e3@{ animation: fast }
 
+    fw === jumpServer
+
+    jumpServer === automation
+
+    vlan e4@==> automation
+    e4@{ animation: fast }
+
+    linkStyle 0 stroke:orange,stroke-width:3px,color:orange;
+    linkStyle 1 stroke:orange,stroke-width:3px,color:orange;
+    linkStyle 2 stroke:orange,stroke-width:3px,color:orange;
+    linkStyle 3 stroke:orange,stroke-width:3px,color:orange;
+    linkStyle 5 stroke:orange,stroke-width:3px,color:orange;
 ```
 
 ### Légende
