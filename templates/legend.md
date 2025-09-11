@@ -31,3 +31,13 @@
 - 📑 = Journalisation / Logs
 - 🧩 = Token / API key
 
+## 🏢 Locaux / Bâtiment administratif
+- 🏢 = Immeuble de bureaux
+- 🏫 = Bâtiment générique (style école, mais fonctionne bien pour « site »)
+- 🏭 = Usine / site industriel (très adapté OT)
+- 🏠 = Petit site / bâtiment unique
+
+## 📍 Localisation / Site client
+- 📍 = Localisation (site sur carte)
+- 🗺️ = Représentation géographique
+- 🛠️ = Atelier / zone technique
