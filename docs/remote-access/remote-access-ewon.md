@@ -7,15 +7,19 @@ flowchart BT
 
     remote([💻 PC distant])
 
-    subgraph automation [🖲️ Automatisme]
-        plc([📟 API])
-        hmi([🎛️ IHM])
-        gtc([💻 GTC])
-    end
+    subgraph site [🏭 Site client]
+        subgraph automation [🖲️ Automatisme]
+            plc([📟 API])
+            hmi([🎛️ IHM])
+            gtc([💻 GTC])
+        end
 
-    subgraph ewon [🖴 Ewon]
-        ewonLan([🔌 LAN])
-        ewonWan([🔌 WAN ou 📡 MODEM])
+        vlan@{ shape: das, label: "LAN autonome ou VLAN dédié" }
+        
+        subgraph ewon [🖴 Ewon]
+            ewonLan([🔌 LAN])
+            ewonWan([🔌 WAN ou 📡 MODEM])
+        end
     end
 
     talk2m((☁️ Talk2M 🧱))
@@ -26,10 +30,9 @@ flowchart BT
     ewon e1@== 🔒 VPN ==> talk2m
     e1@{ animation: fast }
 
-    automation == LAN autonome
-    ou
-    VLAN dédié === ewon
 
+    automation === vlan
+    vlan === ewon
 ```
 
 ### Légende
