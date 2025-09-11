@@ -33,6 +33,9 @@ flowchart BT
 
     automation === vlan
     vlan === ewon
+    
+    linkStyle 0 stroke:orange,stroke-width:3px,color:orange;
+    linkStyle 1 stroke:orange,stroke-width:3px,color:orange;
 ```
 
 ### Légende
