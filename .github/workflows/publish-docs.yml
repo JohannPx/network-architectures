@@ -262,24 +262,29 @@ jobs:
               echo "XeLaTeX failed, trying weasyprint..."
               
               # Créer HTML avec CSS pour emojis
+              cat > emoji.css << 'CSS'
+          @import url('https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap');
+          body { 
+            font-family: 'Noto Sans', 'Noto Color Emoji', sans-serif;
+            max-width: 900px;
+            margin: auto;
+            padding: 20px;
+          }
+          img { max-width: 100%; height: auto; }
+          pre { background: #f4f4f4; padding: 10px; overflow-x: auto; }
+          code { background: #f4f4f4; padding: 2px 4px; }
+          CSS
+              
               pandoc Consolidated.md -o Consolidated.html \
                 --standalone \
                 --metadata title="Network Architectures" \
-                --metadata-file=- << 'META'
-              ---
-              header-includes: |
-                <style>
-                @import url('https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap');
-                body { font-family: 'Noto Sans', 'Noto Color Emoji', sans-serif; }
-                img { max-width: 100%; height: auto; }
-                </style>
-              ---
-              META
+                --css emoji.css
               
-              # HTML vers PDF
+              # HTML vers PDF avec weasyprint
               weasyprint Consolidated.html Remote-Access-Architectures.pdf || {
                 echo "Creating fallback PDF..."
                 echo "# Documentation" > fallback.md
+                echo "Build failed - check artifacts" >> fallback.md
                 pandoc fallback.md -o Remote-Access-Architectures.pdf 2>/dev/null || true
               }
           }
