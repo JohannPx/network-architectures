@@ -31,7 +31,8 @@ flowchart TB
     fw e3@=== vlan
     e3@{ animation: fast }
 
-    fw === jumpServer
+    fw e5@==> jumpServer
+    e5@{ animation: fast }
 
     jumpServer === automation
 
