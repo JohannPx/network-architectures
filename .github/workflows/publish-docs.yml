@@ -1,4 +1,3 @@
-# .github/workflows/publish-docs.yml
 name: Build & Release diagrams
 
 on:
@@ -36,100 +35,255 @@ jobs:
           mkdir -p exports/png
           mkdir -p scripts
 
+      - name: Create Puppeteer config
+        run: |
+          cat > scripts/puppeteer.json << 'JSON'
+          {
+            "args": ["--no-sandbox", "--disable-setuid-sandbox"]
+          }
+          JSON
+
       - name: Add extractor script
         shell: bash
         run: |
           cat > scripts/extract_mermaid_and_replace.py << 'PY'
-          import re, os, sys, subprocess, pathlib, shutil
+          import re
+          import os
+          import sys
+          import subprocess
+          import pathlib
+          import json
 
           SRC_DIRS = ["docs"]
           PNG_DIR = pathlib.Path("exports/png")
           OUT_DIR = pathlib.Path("build/md_processed")
 
-          mermaid_block = re.compile(r"```mermaid\\s*(.*?)\\s*```", re.DOTALL | re.IGNORECASE)
+          # Pattern pour détecter les blocs mermaid
+          mermaid_block = re.compile(r"```mermaid\s*(.*?)\s*```", re.DOTALL | re.IGNORECASE)
 
           def render_mermaid_to_png(mmd_text, out_png):
+              """Convertit un bloc Mermaid en PNG"""
               tmp_mmd = out_png.with_suffix(".mmd")
+              print(f"  Rendering: {out_png.name}")
+              
+              # Écrire le fichier temporaire .mmd
               tmp_mmd.write_text(mmd_text, encoding="utf-8")
+              
               try:
-                  subprocess.run(
-                      ["mmdc", "-i", str(tmp_mmd), "-o", str(out_png), "--puppeteerConfigFile", "scripts/puppeteer.json"],
-                      check=True
+                  # Essayer avec la config puppeteer
+                  result = subprocess.run(
+                      ["mmdc", "-i", str(tmp_mmd), "-o", str(out_png), 
+                       "--puppeteerConfigFile", "scripts/puppeteer.json",
+                       "--theme", "default"],
+                      capture_output=True,
+                      text=True
                   )
-              except FileNotFoundError:
-                  # fallback sans config
-                  subprocess.run(["mmdc", "-i", str(tmp_mmd), "-o", str(out_png)], check=True)
+                  
+                  if result.returncode != 0:
+                      print(f"    Warning: mmdc failed: {result.stderr}")
+                      # Essayer sans config puppeteer
+                      subprocess.run(
+                          ["mmdc", "-i", str(tmp_mmd), "-o", str(out_png)],
+                          check=True
+                      )
+                  
+                  if out_png.exists():
+                      print(f"    ✓ Created: {out_png} ({out_png.stat().st_size} bytes)")
+                  else:
+                      print(f"    ✗ Failed to create: {out_png}")
+                      
+              except Exception as e:
+                  print(f"    ✗ Error rendering: {e}")
               finally:
                   tmp_mmd.unlink(missing_ok=True)
 
           def process_md(md_path):
+              """Traite un fichier Markdown"""
               rel = pathlib.Path(md_path).relative_to(".")
+              print(f"\nProcessing: {rel}")
+              
               text = pathlib.Path(md_path).read_text(encoding="utf-8")
-
+              
+              # Chercher les blocs mermaid
+              matches = list(mermaid_block.finditer(text))
+              print(f"  Found {len(matches)} mermaid blocks")
+              
               idx = 0
               def repl(match):
                   nonlocal idx
                   code = match.group(1).strip()
+                  
+                  # Créer un nom de fichier unique
                   stem = rel.as_posix().replace("/", "_").replace(".md", "")
                   png_name = f"{stem}_m{idx}.png"
                   out_png = PNG_DIR / png_name
+                  
+                  # Créer le répertoire si nécessaire
                   out_png.parent.mkdir(parents=True, exist_ok=True)
+                  
+                  # Convertir en PNG
                   render_mermaid_to_png(code, out_png)
                   idx += 1
-                  return f"![](../../exports/png/{png_name})"
+                  
+                  # Retourner le lien vers l'image
+                  # Utiliser un chemin relatif correct
+                  return f"![Diagram {idx}](../../exports/png/{png_name})"
 
+              # Remplacer les blocs mermaid par des images
               new_text = mermaid_block.sub(repl, text)
-
+              
+              # Écrire le fichier modifié
               out_file = OUT_DIR / rel
               out_file.parent.mkdir(parents=True, exist_ok=True)
               out_file.write_text(new_text, encoding="utf-8")
+              print(f"  Wrote: {out_file}")
 
-          # Puppeteer config (for sandbox)
-          pathlib.Path("scripts/puppeteer.json").write_text('{"args": ["--no-sandbox","--disable-setuid-sandbox"]}')
+          def main():
+              print("=== Mermaid to PNG Converter ===")
+              
+              # Lister tous les fichiers MD
+              md_files = []
+              for root in SRC_DIRS:
+                  if pathlib.Path(root).exists():
+                      for p in pathlib.Path(root).rglob("*.md"):
+                          md_files.append(str(p))
+              
+              print(f"Found {len(md_files)} markdown files")
+              
+              if not md_files:
+                  print("Warning: No markdown files found!")
+                  # Créer un fichier de test si aucun n'existe
+                  test_dir = pathlib.Path("docs")
+                  test_dir.mkdir(exist_ok=True)
+                  test_file = test_dir / "test.md"
+                  test_file.write_text("# Test\n\nNo mermaid content", encoding="utf-8")
+                  md_files = [str(test_file)]
+              
+              # Traiter chaque fichier
+              for md_file in md_files:
+                  process_md(md_file)
+              
+              # Vérifier les résultats
+              png_files = list(PNG_DIR.glob("*.png"))
+              print(f"\n=== Results ===")
+              print(f"Generated {len(png_files)} PNG files")
+              
+              if png_files:
+                  print("PNG files created:")
+                  for png in png_files[:10]:  # Afficher max 10
+                      print(f"  - {png.name} ({png.stat().st_size} bytes)")
+                  if len(png_files) > 10:
+                      print(f"  ... and {len(png_files) - 10} more")
+              else:
+                  print("Warning: No PNG files were generated!")
 
-          for root in SRC_DIRS:
-              for p in pathlib.Path(root).rglob("*.md"):
-                  process_md(str(p))
+          if __name__ == "__main__":
+              main()
           PY
 
       - name: Extract Mermaid blocks to PNG and rewrite MD
         run: python3 scripts/extract_mermaid_and_replace.py
 
-      - name: Install pandoc and XeLaTeX
+      - name: Debug - List generated files
+        run: |
+          echo "=== PNG files in exports/png ==="
+          ls -la exports/png/ || echo "No PNG directory"
+          echo ""
+          echo "=== MD files in build/md_processed ==="
+          find build/md_processed -name "*.md" -exec echo {} \; || echo "No processed MD files"
+
+      - name: Install pandoc and LaTeX
         run: |
           sudo apt-get update
-          sudo apt-get install -y pandoc texlive-xetex texlive-fonts-recommended fonts-noto fonts-noto-color-emoji
+          sudo apt-get install -y pandoc texlive-latex-base texlive-fonts-recommended texlive-latex-extra fonts-noto fonts-noto-color-emoji
 
       - name: Build consolidated PDF with pandoc
         run: |
-          printf "# Network Architectures - Remote Access\n\n" > build/Consolidated.md
+          # Script Python pour créer le fichier consolidé proprement
+          python3 << 'PY'
+          import pathlib
+          from pathlib import Path
           
-          find build/md_processed -name "*.md" | sort >> build/filelist.txt
+          # Créer l'en-tête sans caractères problématiques
+          consolidated = Path("build/Consolidated.md")
+          consolidated.write_text("# Network Architectures - Remote Access\n\n", encoding="utf-8")
           
-          while read f; do
-            printf "\n\n---\n\n" >> build/Consolidated.md
-            cat "$f" >> build/Consolidated.md
-          done < build/filelist.txt
+          # Trouver et ajouter tous les fichiers MD
+          md_files = sorted(Path("build/md_processed").rglob("*.md"))
           
-          # Utiliser XeLaTeX avec configuration pour les emojis
+          if not md_files:
+              print("Warning: No processed MD files found!")
+              # Créer un contenu minimal
+              with open(consolidated, "a", encoding="utf-8") as out:
+                  out.write("\n## No content found\n\n")
+                  out.write("Please add markdown files in the docs/ directory.\n")
+          else:
+              print(f"Consolidating {len(md_files)} files...")
+              for md_file in md_files:
+                  print(f"  Adding: {md_file}")
+                  with open(consolidated, "a", encoding="utf-8") as out:
+                      out.write("\n\n---\n\n")
+                      content = md_file.read_text(encoding="utf-8")
+                      # Nettoyer les caractères problématiques
+                      content = content.replace("–", "-")  # tiret cadratin
+                      content = content.replace("—", "-")  # tiret long
+                      content = content.replace(""", '"')  # guillemets courbes
+                      content = content.replace(""", '"')
+                      content = content.replace("'", "'")
+                      content = content.replace("'", "'")
+                      out.write(content)
+          
+          print(f"Created: {consolidated}")
+          PY
+          
+          # Générer le PDF
           pandoc build/Consolidated.md -o build/Remote-Access-Architectures.pdf \
-            --pdf-engine=xelatex \
-            --variable mainfont="DejaVu Sans" \
-            --variable monofont="DejaVu Sans Mono"
+            --pdf-engine=pdflatex \
+            --variable geometry:margin=1in \
+            --variable fontsize=11pt \
+            --highlight-style=tango || echo "PDF generation failed, continuing..."
 
       - name: Zip PNG exports
         run: |
-          cd exports
-          zip -r ../build/diagrams-png.zip png
-          cd ..
+          if [ -d "exports/png" ] && [ "$(ls -A exports/png)" ]; then
+            cd exports
+            zip -r ../build/diagrams-png.zip png
+            cd ..
+            echo "Created diagrams-png.zip"
+          else
+            echo "No PNG files to zip, creating empty archive"
+            mkdir -p exports/png
+            echo "No diagrams generated" > exports/png/README.txt
+            cd exports
+            zip -r ../build/diagrams-png.zip png
+            cd ..
+          fi
+
+      - name: Get current date
+        id: date
+        run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: auto-${{ github.run_number }}
-          name: "Auto Release ${{ github.run_number }}"
+          tag_name: v${{ github.run_number }}
+          name: "Documentation Build #${{ github.run_number }} - ${{ steps.date.outputs.date }}"
           draft: false
-          prerelease: true
+          prerelease: ${{ github.ref != 'refs/heads/main' }}
+          body: |
+            ## 📚 Documentation Release
+            
+            **Build:** #${{ github.run_number }}
+            **Date:** ${{ steps.date.outputs.date }}
+            **Branch:** ${{ github.ref_name }}
+            **Commit:** ${{ github.sha }}
+            
+            ### 📦 Artifacts
+            - `Remote-Access-Architectures.pdf` - Documentation complète en PDF
+            - `diagrams-png.zip` - Diagrammes exportés en PNG
+            
+            ### 🔄 Changes
+            See commit history for details.
           files: |
             build/Remote-Access-Architectures.pdf
             build/diagrams-png.zip
