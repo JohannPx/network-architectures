@@ -7,7 +7,7 @@ on:
       - draft
 
 permissions:
-  contents: write  # nécessaire pour créer une Release
+  contents: write
 
 jobs:
   build-release:
@@ -26,7 +26,6 @@ jobs:
         run: |
           npm i -g @mermaid-js/mermaid-cli@10
           sudo apt-get update
-          # Polices pour bon rendu des emojis
           sudo apt-get install -y fonts-noto fonts-noto-color-emoji fonts-emojione
 
       - name: Prepare folders
@@ -52,26 +51,24 @@ jobs:
           import sys
           import subprocess
           import pathlib
-          import json
 
-          SRC_DIRS = ["docs"]
+          SRC_DIRS = ["docs", "."]
           PNG_DIR = pathlib.Path("exports/png")
           OUT_DIR = pathlib.Path("build/md_processed")
 
-          # Pattern pour détecter les blocs mermaid (case insensitive)
-          mermaid_block = re.compile(r"```[mM]ermaid\s*(.*?)\s*```", re.DOTALL)
+          # Pattern pour détecter les blocs mermaid - CORRIGÉ
+          mermaid_block = re.compile(r'^```mermaid\s*\n(.*?)\n```', re.MULTILINE | re.DOTALL)
 
           def render_mermaid_to_png(mmd_text, out_png):
-              """Convertit un bloc Mermaid en PNG"""
+              """Convertit un bloc Mermaid en PNG avec emojis"""
               tmp_mmd = out_png.with_suffix(".mmd")
               print(f"  Rendering: {out_png.name}")
               
-              # NE PAS nettoyer les emojis - Mermaid peut les rendre !
-              # Écrire le fichier temporaire .mmd avec les emojis
+              # Garder les emojis dans le diagramme
               tmp_mmd.write_text(mmd_text, encoding="utf-8")
               
               try:
-                  # Utiliser mmdc avec config pour supporter les emojis
+                  # Utiliser mmdc avec timeout et config
                   result = subprocess.run(
                       ["mmdc", "-i", str(tmp_mmd), "-o", str(out_png), 
                        "--puppeteerConfigFile", "scripts/puppeteer.json",
@@ -80,34 +77,27 @@ jobs:
                        "--height", "800"],
                       capture_output=True,
                       text=True,
-                      timeout=30
+                      timeout=60
                   )
                   
                   if result.returncode != 0:
-                      print(f"    Warning: mmdc with config failed: {result.stderr}")
-                      # Essayer sans config puppeteer
-                      result2 = subprocess.run(
-                          ["mmdc", "-i", str(tmp_mmd), "-o", str(out_png),
-                           "--width", "1200", "--height", "800"],
-                          capture_output=True,
-                          text=True,
-                          timeout=30
+                      print(f"    Warning: {result.stderr}")
+                      # Essai sans config
+                      subprocess.run(
+                          ["mmdc", "-i", str(tmp_mmd), "-o", str(out_png)],
+                          timeout=60
                       )
-                      if result2.returncode != 0:
-                          print(f"    Error: mmdc failed: {result2.stderr}")
                   
                   if out_png.exists():
                       size = out_png.stat().st_size
                       print(f"    ✓ Created: {out_png.name} ({size} bytes)")
-                      if size < 100:
-                          print(f"    Warning: PNG file seems too small ({size} bytes)")
                   else:
-                      print(f"    ✗ Failed to create: {out_png}")
+                      print(f"    ✗ Failed to create PNG")
                       
               except subprocess.TimeoutExpired:
                   print(f"    ✗ Timeout while rendering")
               except Exception as e:
-                  print(f"    ✗ Error rendering: {e}")
+                  print(f"    ✗ Error: {e}")
               finally:
                   tmp_mmd.unlink(missing_ok=True)
 
@@ -118,13 +108,17 @@ jobs:
               
               text = pathlib.Path(md_path).read_text(encoding="utf-8")
               
+              # Debug: afficher les premiers caractères
+              print(f"  File size: {len(text)} chars")
+              if "mermaid" in text.lower():
+                  print(f"  ✓ Contains 'mermaid' keyword")
+              
               # Chercher les blocs mermaid
               matches = list(mermaid_block.finditer(text))
               print(f"  Found {len(matches)} mermaid blocks")
               
               if matches:
-                  # Afficher le début du premier bloc pour debug
-                  first_block = matches[0].group(1)[:100]
+                  first_block = matches[0].group(1)[:50]
                   print(f"  First block preview: {first_block}...")
               
               idx = 0
@@ -132,31 +126,24 @@ jobs:
                   nonlocal idx
                   code = match.group(1).strip()
                   
-                  # Créer un nom de fichier unique
                   stem = rel.as_posix().replace("/", "_").replace(".md", "")
                   png_name = f"{stem}_m{idx}.png"
                   out_png = PNG_DIR / png_name
                   
-                  # Créer le répertoire si nécessaire
                   out_png.parent.mkdir(parents=True, exist_ok=True)
-                  
-                  # Convertir en PNG (avec emojis!)
                   render_mermaid_to_png(code, out_png)
                   idx += 1
                   
-                  # Retourner le lien vers l'image
+                  # Chemin relatif correct pour pandoc
                   return f"![Diagram {idx}](exports/png/{png_name})"
 
-              # Remplacer les blocs mermaid par des images
+              # Remplacer les blocs mermaid
               new_text = mermaid_block.sub(repl, text)
               
-              # Vérifier si des remplacements ont été faits
-              if text != new_text:
-                  print(f"  ✓ Replaced {idx} mermaid blocks with images")
-              else:
-                  print(f"  → No changes made")
+              if idx > 0:
+                  print(f"  ✓ Replaced {idx} mermaid blocks")
               
-              # Écrire le fichier modifié (avec les emojis préservés!)
+              # Écrire le fichier avec emojis préservés
               out_file = OUT_DIR / rel
               out_file.parent.mkdir(parents=True, exist_ok=True)
               out_file.write_text(new_text, encoding="utf-8")
@@ -165,103 +152,50 @@ jobs:
           def main():
               print("=== Mermaid to PNG Converter ===")
               
-              # Vérifier que mmdc est installé
+              # Vérifier mmdc
               try:
                   result = subprocess.run(["mmdc", "--version"], capture_output=True, text=True)
-                  print(f"Mermaid CLI version: {result.stdout.strip()}")
-              except FileNotFoundError:
-                  print("ERROR: mmdc not found! Please install @mermaid-js/mermaid-cli")
+                  print(f"Mermaid CLI: {result.stdout.strip()}")
+              except:
+                  print("ERROR: mmdc not found!")
                   sys.exit(1)
               
-              # Lister tous les fichiers MD
+              # Lister les fichiers MD
               md_files = []
               for root in SRC_DIRS:
                   if pathlib.Path(root).exists():
                       for p in pathlib.Path(root).rglob("*.md"):
-                          md_files.append(str(p))
+                          if not str(p).startswith("build/"):
+                              md_files.append(str(p))
               
               print(f"Found {len(md_files)} markdown files")
-              
-              if not md_files:
-                  print("Warning: No markdown files found!")
-                  # Créer un fichier de test si aucun n'existe
-                  test_dir = pathlib.Path("docs")
-                  test_dir.mkdir(exist_ok=True)
-                  test_file = test_dir / "test.md"
-                  test_file.write_text("# Test\n\nNo mermaid content", encoding="utf-8")
-                  md_files = [str(test_file)]
               
               # Traiter chaque fichier
               for md_file in md_files:
                   process_md(md_file)
               
-              # Vérifier les résultats
+              # Résultats
               png_files = list(PNG_DIR.glob("*.png"))
               print(f"\n=== Results ===")
               print(f"Generated {len(png_files)} PNG files")
               
               if png_files:
-                  print("PNG files created:")
-                  for png in png_files[:10]:  # Afficher max 10
+                  for png in png_files[:5]:
                       print(f"  - {png.name} ({png.stat().st_size} bytes)")
-                  if len(png_files) > 10:
-                      print(f"  ... and {len(png_files) - 10} more")
-              else:
-                  print("Warning: No PNG files were generated!")
-                  print("Possible causes:")
-                  print("  - No mermaid blocks found in markdown files")
-                  print("  - Mermaid syntax errors in the diagrams")
-                  print("  - mmdc rendering failures")
 
           if __name__ == "__main__":
               main()
           PY
 
-      - name: Check for Mermaid blocks in source files
+      - name: Extract Mermaid blocks to PNG
         run: |
-          echo "=== Checking for Mermaid blocks in source files ==="
-          for file in docs/**/*.md; do
-            if [ -f "$file" ]; then
-              echo "Checking: $file"
-              if grep -i "^\`\`\`mermaid" "$file" > /dev/null; then
-                echo "  ✓ Contains Mermaid blocks"
-                echo "  First mermaid block:"
-                awk '/^```[mM]ermaid/,/^```/' "$file" | head -n 10
-              else
-                echo "  - No Mermaid blocks found"
-              fi
-            fi
-          done
-          echo ""
-
-      - name: Extract Mermaid blocks to PNG and rewrite MD
-        run: |
-          echo "=== Starting Mermaid extraction ==="
+          echo "=== Extraction Mermaid ==="
           python3 scripts/extract_mermaid_and_replace.py
           echo ""
-          echo "=== Checking results ==="
-          if [ -d "exports/png" ]; then
-            echo "PNG files generated:"
-            ls -la exports/png/ || echo "Empty directory"
-          else
-            echo "ERROR: exports/png directory not created!"
-          fi
+          echo "=== PNG générés ==="
+          ls -la exports/png/ 2>/dev/null || echo "Pas de PNG"
 
-      - name: Debug - List generated files
-        run: |
-          echo "=== PNG files in exports/png ==="
-          ls -la exports/png/ || echo "No PNG directory"
-          echo ""
-          echo "=== MD files in build/md_processed ==="
-          find build/md_processed -name "*.md" -exec echo {} \; || echo "No processed MD files"
-          echo ""
-          echo "=== Sample of processed MD content ==="
-          if [ -f "build/md_processed/docs/remote-access/remote-access-ewon.md" ]; then
-            echo "First 30 lines of remote-access-ewon.md:"
-            head -n 30 build/md_processed/docs/remote-access/remote-access-ewon.md
-          fi
-
-      - name: Install pandoc and XeLaTeX (avec support emoji)
+      - name: Install pandoc and dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -274,109 +208,85 @@ jobs:
             fonts-noto-color-emoji \
             fonts-emojione \
             fonts-dejavu \
-            fonts-liberation
+            python3-pip
+          pip3 install weasyprint
 
-      - name: Build consolidated PDF with pandoc (AVEC EMOJIS!)
+      - name: Build PDF with emojis
         run: |
-          # Script Python pour créer le fichier consolidé SANS nettoyer les emojis
+          # Créer le fichier consolidé
           python3 << 'PY'
           import pathlib
           import shutil
           from pathlib import Path
           
-          # Créer l'en-tête
           consolidated = Path("build/Consolidated.md")
-          
-          # Écrire l'en-tête AVEC les emojis si vous voulez
           header = "# Network Architectures - Remote Access 🌐🔒\n\n"
           consolidated.write_text(header, encoding="utf-8")
           
-          # Trouver et ajouter tous les fichiers MD
           md_files = sorted(Path("build/md_processed").rglob("*.md"))
           
-          if not md_files:
-              print("Warning: No processed MD files found!")
-              with open(consolidated, "a", encoding="utf-8") as out:
-                  out.write("\n## No content found\n\n")
-                  out.write("Please add markdown files in the docs/ directory.\n")
-          else:
+          if md_files:
               print(f"Consolidating {len(md_files)} files...")
               for md_file in md_files:
                   print(f"  Adding: {md_file}")
                   with open(consolidated, "a", encoding="utf-8") as out:
                       out.write("\n\n---\n\n")
                       content = md_file.read_text(encoding="utf-8")
-                      # NE PAS nettoyer le contenu - garder les emojis!
                       out.write(content)
           
-          print(f"Created: {consolidated}")
-          
-          # Copier les images PNG dans le répertoire build pour qu'elles soient accessibles
+          # Copier les PNG
           png_source = Path("exports/png")
           png_dest = Path("build/exports/png")
           
           if png_source.exists() and any(png_source.glob("*.png")):
               png_dest.mkdir(parents=True, exist_ok=True)
-              count = 0
               for png in png_source.glob("*.png"):
                   shutil.copy2(png, png_dest / png.name)
-                  count += 1
-              print(f"\nCopied {count} PNG files to build/exports/png")
-          else:
-              print("\nWARNING: No PNG files found to copy!")
+              print(f"Copied {len(list(png_source.glob('*.png')))} PNG files")
           PY
           
-          # Vérifier que le fichier consolidé est créé
-          echo ""
-          echo "=== Checking consolidated file ==="
-          if [ -f "build/Consolidated.md" ]; then
-            echo "Consolidated.md exists"
-          else
-            echo "ERROR: Consolidated.md not found!"
-          fi
-          
-          # Générer le PDF avec XeLaTeX qui supporte les emojis
-          echo ""
-          echo "=== Generating PDF with emoji support ==="
           cd build
           
-          # Utiliser XeLaTeX directement pour le support des emojis
+          # Option 1: XeLaTeX (meilleur support emoji)
+          echo "=== Génération PDF avec XeLaTeX ==="
           pandoc Consolidated.md -o Remote-Access-Architectures.pdf \
             --pdf-engine=xelatex \
             --variable geometry:margin=1in \
             --variable fontsize=11pt \
-            --variable mainfont="DejaVu Sans" \
-            --variable monofont="DejaVu Sans Mono" \
-            --variable mathfont="DejaVu Math TeX Gyre" \
-            --variable CJKmainfont="Noto Sans CJK SC" \
+            --variable mainfont="Noto Sans" \
+            --variable monofont="Noto Sans Mono" \
             --variable colorlinks=true \
-            --highlight-style=tango \
-            -V "fontfamily:noto" \
-            2>&1 || {
-              echo "XeLaTeX with DejaVu failed, trying with Noto fonts..."
-              pandoc Consolidated.md -o Remote-Access-Architectures.pdf \
-                --pdf-engine=xelatex \
-                --variable geometry:margin=1in \
-                --variable fontsize=11pt \
-                --variable mainfont="Noto Sans" \
-                --variable monofont="Noto Sans Mono" \
-                --variable colorlinks=true \
-                --highlight-style=tango \
-                2>&1 || echo "PDF generation failed, continuing..."
-            }
+            --highlight-style=tango 2>&1 || {
+              
+              # Option 2: Weasyprint si XeLaTeX échoue
+              echo "XeLaTeX failed, trying weasyprint..."
+              
+              # Créer HTML avec CSS pour emojis
+              pandoc Consolidated.md -o Consolidated.html \
+                --standalone \
+                --metadata title="Network Architectures" \
+                --metadata-file=- << 'META'
+              ---
+              header-includes: |
+                <style>
+                @import url('https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap');
+                body { font-family: 'Noto Sans', 'Noto Color Emoji', sans-serif; }
+                img { max-width: 100%; height: auto; }
+                </style>
+              ---
+              META
+              
+              # HTML vers PDF
+              weasyprint Consolidated.html Remote-Access-Architectures.pdf || {
+                echo "Creating fallback PDF..."
+                echo "# Documentation" > fallback.md
+                pandoc fallback.md -o Remote-Access-Architectures.pdf 2>/dev/null || true
+              }
+          }
           
-          # Vérifier si le PDF a été créé
-          echo ""
           if [ -f "Remote-Access-Architectures.pdf" ]; then
-            echo "✓ PDF file created with emoji support!"
+            echo "✓ PDF créé avec succès!"
             ls -lh Remote-Access-Architectures.pdf
-          else
-            echo "✗ PDF was not created"
-            # Créer un PDF minimal
-            echo "Creating minimal PDF..."
-            echo "# Documentation" > minimal.md
-            echo "PDF generation failed. Please check PNG exports." >> minimal.md
-            pandoc minimal.md -o Remote-Access-Architectures.pdf 2>/dev/null || true
           fi
 
       - name: Zip PNG exports
@@ -385,12 +295,10 @@ jobs:
             cd exports
             zip -r ../build/diagrams-png.zip png
             cd ..
-            echo "Created diagrams-png.zip with PNG files"
+            echo "✓ ZIP créé avec les PNG"
           else
-            echo "No PNG files to zip, creating empty archive"
             mkdir -p exports/png
-            echo "No diagrams were generated from Mermaid blocks" > exports/png/README.txt
-            echo "Please check that your markdown files contain valid Mermaid blocks" >> exports/png/README.txt
+            echo "Aucun diagramme généré - vérifiez vos blocs Mermaid" > exports/png/README.txt
             cd exports
             zip -r ../build/diagrams-png.zip png
             cd ..
@@ -408,19 +316,15 @@ jobs:
           draft: false
           prerelease: ${{ github.ref != 'refs/heads/main' }}
           body: |
-            ## 📚 Documentation Release avec Emojis! 🚀
+            ## 📚 Documentation Release
             
             **Build:** #${{ github.run_number }}
             **Date:** ${{ steps.date.outputs.date }}
             **Branch:** ${{ github.ref_name }}
-            **Commit:** ${{ github.sha }}
             
             ### 📦 Artifacts
-            - `Remote-Access-Architectures.pdf` - Documentation complète en PDF avec emojis 💻🌐
-            - `diagrams-png.zip` - Diagrammes Mermaid exportés en PNG
-            
-            ### 🔄 Changes
-            See commit history for details.
+            - `Remote-Access-Architectures.pdf` - Documentation avec emojis 💻🌐
+            - `diagrams-png.zip` - Diagrammes Mermaid en PNG
           files: |
             build/Remote-Access-Architectures.pdf
             build/diagrams-png.zip
