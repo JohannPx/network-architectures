@@ -58,40 +58,76 @@ jobs:
           PNG_DIR = pathlib.Path("exports/png")
           OUT_DIR = pathlib.Path("build/md_processed")
 
-          # Pattern pour détecter les blocs mermaid
-          mermaid_block = re.compile(r"```mermaid\s*(.*?)\s*```", re.DOTALL | re.IGNORECASE)
+          # Pattern pour détecter les blocs mermaid (case insensitive)
+          # Accepte aussi bien ```mermaid que ```Mermaid
+          mermaid_block = re.compile(r"```[mM]ermaid\s*(.*?)\s*```", re.DOTALL)
 
           def render_mermaid_to_png(mmd_text, out_png):
               """Convertit un bloc Mermaid en PNG"""
               tmp_mmd = out_png.with_suffix(".mmd")
               print(f"  Rendering: {out_png.name}")
               
+              # Nettoyer le texte Mermaid des emojis pour éviter les problèmes
+              # Remplacer les emojis courants par du texte
+              mmd_clean = mmd_text
+              emoji_replacements = {
+                  '💻': 'PC',
+                  '🌐': 'WEB',
+                  '☁': 'Cloud',
+                  '🔒': 'Lock',
+                  '🏢': 'Office',
+                  '📱': 'Mobile',
+                  '🖥️': 'Desktop',
+                  '🔧': 'Tool',
+                  '⚙️': 'Config',
+                  '🛡️': 'Shield',
+                  '📡': 'Antenna',
+                  '🔑': 'Key',
+                  '🚀': 'Rocket',
+                  '🏭': 'Factory'
+              }
+              
+              for emoji, text in emoji_replacements.items():
+                  mmd_clean = mmd_clean.replace(emoji, text)
+              
               # Écrire le fichier temporaire .mmd
-              tmp_mmd.write_text(mmd_text, encoding="utf-8")
+              tmp_mmd.write_text(mmd_clean, encoding="utf-8")
               
               try:
                   # Essayer avec la config puppeteer
                   result = subprocess.run(
                       ["mmdc", "-i", str(tmp_mmd), "-o", str(out_png), 
                        "--puppeteerConfigFile", "scripts/puppeteer.json",
-                       "--theme", "default"],
+                       "--theme", "default",
+                       "--width", "1200",
+                       "--height", "800"],
                       capture_output=True,
-                      text=True
+                      text=True,
+                      timeout=30
                   )
                   
                   if result.returncode != 0:
-                      print(f"    Warning: mmdc failed: {result.stderr}")
+                      print(f"    Warning: mmdc with config failed: {result.stderr}")
                       # Essayer sans config puppeteer
-                      subprocess.run(
+                      result2 = subprocess.run(
                           ["mmdc", "-i", str(tmp_mmd), "-o", str(out_png)],
-                          check=True
+                          capture_output=True,
+                          text=True,
+                          timeout=30
                       )
+                      if result2.returncode != 0:
+                          print(f"    Error: mmdc failed: {result2.stderr}")
                   
                   if out_png.exists():
-                      print(f"    ✓ Created: {out_png} ({out_png.stat().st_size} bytes)")
+                      size = out_png.stat().st_size
+                      print(f"    ✓ Created: {out_png.name} ({size} bytes)")
+                      if size < 100:
+                          print(f"    Warning: PNG file seems too small ({size} bytes)")
                   else:
                       print(f"    ✗ Failed to create: {out_png}")
                       
+              except subprocess.TimeoutExpired:
+                  print(f"    ✗ Timeout while rendering")
               except Exception as e:
                   print(f"    ✗ Error rendering: {e}")
               finally:
@@ -107,6 +143,11 @@ jobs:
               # Chercher les blocs mermaid
               matches = list(mermaid_block.finditer(text))
               print(f"  Found {len(matches)} mermaid blocks")
+              
+              if matches:
+                  # Afficher le début du premier bloc pour debug
+                  first_block = matches[0].group(1)[:100]
+                  print(f"  First block preview: {first_block}...")
               
               idx = 0
               def repl(match):
@@ -126,11 +167,17 @@ jobs:
                   idx += 1
                   
                   # Retourner le lien vers l'image
-                  # Utiliser un chemin relatif correct
-                  return f"![Diagram {idx}](../../exports/png/{png_name})"
+                  # Chemin relatif pour pandoc depuis build/
+                  return f"![Diagram {idx}](exports/png/{png_name})"
 
               # Remplacer les blocs mermaid par des images
               new_text = mermaid_block.sub(repl, text)
+              
+              # Vérifier si des remplacements ont été faits
+              if text != new_text:
+                  print(f"  ✓ Replaced {idx} mermaid blocks with images")
+              else:
+                  print(f"  → No changes made")
               
               # Écrire le fichier modifié
               out_file = OUT_DIR / rel
@@ -140,6 +187,14 @@ jobs:
 
           def main():
               print("=== Mermaid to PNG Converter ===")
+              
+              # Vérifier que mmdc est installé
+              try:
+                  result = subprocess.run(["mmdc", "--version"], capture_output=True, text=True)
+                  print(f"Mermaid CLI version: {result.stdout.strip()}")
+              except FileNotFoundError:
+                  print("ERROR: mmdc not found! Please install @mermaid-js/mermaid-cli")
+                  sys.exit(1)
               
               # Lister tous les fichiers MD
               md_files = []
@@ -176,6 +231,10 @@ jobs:
                       print(f"  ... and {len(png_files) - 10} more")
               else:
                   print("Warning: No PNG files were generated!")
+                  print("Possible causes:")
+                  print("  - No mermaid blocks found in markdown files")
+                  print("  - Mermaid syntax errors in the diagrams")
+                  print("  - mmdc rendering failures")
 
           if __name__ == "__main__":
               main()
