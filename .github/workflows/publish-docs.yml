@@ -102,12 +102,20 @@ jobs:
             
       - name: Build consolidated PDF with pandoc
         run: |
-          echo "# Network Architectures – Remote Access\n" > build/Consolidated.md
+          # Utiliser printf pour gérer correctement les sauts de ligne
+          # et un tiret simple au lieu du tiret cadratin
+          printf "# Network Architectures - Remote Access\n\n" > build/Consolidated.md
+          
+          # Trouver et trier les fichiers MD
           find build/md_processed -name "*.md" | sort >> build/filelist.txt
+          
+          # Concatener les fichiers avec des séparateurs
           while read f; do
-            echo -e "\n\n---\n" >> build/Consolidated.md
+            printf "\n\n---\n\n" >> build/Consolidated.md
             cat "$f" >> build/Consolidated.md
           done < build/filelist.txt
+          
+          # Générer le PDF
           pandoc build/Consolidated.md -o build/Remote-Access-Architectures.pdf
 
       - name: Zip PNG exports
