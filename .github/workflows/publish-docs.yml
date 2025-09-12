@@ -95,28 +95,27 @@ jobs:
       - name: Extract Mermaid blocks to PNG and rewrite MD
         run: python3 scripts/extract_mermaid_and_replace.py
 
-      - name: Install pandoc and LaTeX
+      - name: Install pandoc and XeLaTeX
         run: |
-            sudo apt-get update
-            sudo apt-get install -y pandoc texlive-latex-base texlive-fonts-recommended texlive-latex-extra fonts-noto fonts-noto-color-emoji
-            
+          sudo apt-get update
+          sudo apt-get install -y pandoc texlive-xetex texlive-fonts-recommended fonts-noto fonts-noto-color-emoji
+
       - name: Build consolidated PDF with pandoc
         run: |
-          # Utiliser printf pour gérer correctement les sauts de ligne
-          # et un tiret simple au lieu du tiret cadratin
           printf "# Network Architectures - Remote Access\n\n" > build/Consolidated.md
           
-          # Trouver et trier les fichiers MD
           find build/md_processed -name "*.md" | sort >> build/filelist.txt
           
-          # Concatener les fichiers avec des séparateurs
           while read f; do
             printf "\n\n---\n\n" >> build/Consolidated.md
             cat "$f" >> build/Consolidated.md
           done < build/filelist.txt
           
-          # Générer le PDF
-          pandoc build/Consolidated.md -o build/Remote-Access-Architectures.pdf
+          # Utiliser XeLaTeX avec configuration pour les emojis
+          pandoc build/Consolidated.md -o build/Remote-Access-Architectures.pdf \
+            --pdf-engine=xelatex \
+            --variable mainfont="DejaVu Sans" \
+            --variable monofont="DejaVu Sans Mono"
 
       - name: Zip PNG exports
         run: |
