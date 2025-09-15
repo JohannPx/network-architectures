@@ -25,106 +25,224 @@ jobs:
             texlive-xetex \
             texlive-latex-extra \
             fonts-noto \
-            fonts-noto-color-emoji
+            fonts-noto-color-emoji \
+            python3-pip
+          
+          pip3 install requests
 
-      - name: Generate PDFs from Markdown
+      - name: Process Markdown and Generate PDFs with diagrams
         run: |
           mkdir -p build/pdf
           mkdir -p build/png
+          mkdir -p build/temp
           
-          # Générer un PDF pour chaque fichier MD sous docs/
-          for mdfile in docs/**/*.md; do
-            if [ -f "$mdfile" ]; then
-              # Créer le nom du PDF
-              pdfname=$(echo "$mdfile" | sed 's|docs/||' | sed 's|/|_|g' | sed 's|\.md|\.pdf|')
-              
-              echo "Converting $mdfile to build/pdf/$pdfname"
-              
-              # Convertir avec XeLaTeX pour support emoji
-              pandoc "$mdfile" \
-                -o "build/pdf/$pdfname" \
-                --pdf-engine=xelatex \
-                --variable mainfont="Noto Sans" \
-                --variable geometry:margin=1in \
-                --variable fontsize=11pt \
-                --highlight-style=tango 2>/dev/null || \
-              # Fallback sur pdflatex si XeLaTeX échoue
-              pandoc "$mdfile" \
-                -o "build/pdf/$pdfname" \
-                --pdf-engine=pdflatex 2>/dev/null || \
-              echo "  Failed to convert $mdfile"
-            fi
-          done
+          # Script Python qui convertit Mermaid en PNG via Kroki.io
+          cat > process.py << 'PYTHON'
+          import re
+          import pathlib
+          import subprocess
+          import requests
+          import base64
+          import zlib
           
-          # Compter les résultats
-          pdf_count=$(ls -1 build/pdf/*.pdf 2>/dev/null | wc -l)
-          echo "Generated $pdf_count PDF files"
+          def clean_mermaid_syntax(code):
+              """Nettoie la syntaxe Mermaid non standard"""
+              # Remplacer @{ shape: das, label: "..." } par ["..."]
+              code = re.sub(r'(\w+)@\{\s*shape:\s*das,\s*label:\s*"([^"]+)"\s*\}', r'\1["\2"]', code)
+              # Supprimer les animations
+              code = re.sub(r'\w+@\{\s*animation:\s*\w+\s*\}', '', code)
+              code = re.sub(r'(\w+)\s+e\d+@', r'\1 ', code)
+              return code
+          
+          def mermaid_to_png_kroki(mermaid_code, output_path):
+              """Convertit Mermaid en PNG via Kroki.io"""
+              try:
+                  # Nettoyer le code
+                  cleaned = clean_mermaid_syntax(mermaid_code)
+                  
+                  # Encoder pour Kroki
+                  compressed = zlib.compress(cleaned.encode('utf-8'), 9)
+                  encoded = base64.urlsafe_b64encode(compressed).decode('ascii')
+                  
+                  # Appeler Kroki
+                  url = f"https://kroki.io/mermaid/png/{encoded}"
+                  response = requests.get(url, timeout=30)
+                  
+                  if response.status_code == 200:
+                      output_path.parent.mkdir(parents=True, exist_ok=True)
+                      output_path.write_bytes(response.content)
+                      print(f"    ✓ PNG generated: {output_path.name}")
+                      return True
+                  else:
+                      print(f"    ✗ Kroki error: {response.status_code}")
+                      return False
+              except Exception as e:
+                  print(f"    ✗ Error: {str(e)[:100]}")
+                  return False
+          
+          def process_markdown_file(md_path):
+              """Traite un fichier Markdown"""
+              print(f"\n📄 Processing: {md_path}")
+              
+              content = md_path.read_text(encoding='utf-8')
+              
+              # Pattern pour les blocs mermaid
+              pattern = re.compile(r'^```mermaid\s*\n(.*?)\n```', re.MULTILINE | re.DOTALL)
+              matches = pattern.findall(content)
+              print(f"  Found {len(matches)} mermaid blocks")
+              
+              # Remplacer chaque bloc mermaid par une image
+              counter = 0
+              def replace_mermaid(match):
+                  nonlocal counter
+                  code = match.group(1)
+                  
+                  # Générer nom unique pour le PNG
+                  stem = str(md_path.relative_to(pathlib.Path('docs'))).replace('/', '_').replace('.md', '')
+                  png_name = f"{stem}_{counter}.png"
+                  png_path = pathlib.Path(f"build/png/{png_name}")
+                  
+                  # Convertir en PNG via Kroki
+                  if mermaid_to_png_kroki(code, png_path):
+                      counter += 1
+                      # Retourner l'image pour le MD
+                      return f"\n![Diagram]({png_path.absolute()})\n"
+                  else:
+                      # Si échec, garder le code
+                      return match.group(0)
+              
+              # Remplacer tous les blocs
+              processed_content = pattern.sub(replace_mermaid, content)
+              
+              # Sauvegarder le MD traité
+              temp_md = pathlib.Path(f"build/temp/{md_path.name}")
+              temp_md.parent.mkdir(parents=True, exist_ok=True)
+              temp_md.write_text(processed_content, encoding='utf-8')
+              
+              # Générer le PDF avec les images intégrées
+              pdf_name = str(md_path.relative_to(pathlib.Path('docs'))).replace('/', '_').replace('.md', '.pdf')
+              pdf_path = pathlib.Path(f"build/pdf/{pdf_name}")
+              
+              # Convertir en PDF avec XeLaTeX pour les emojis
+              cmd = [
+                  'pandoc', str(temp_md),
+                  '-o', str(pdf_path),
+                  '--pdf-engine=xelatex',
+                  '--variable', 'geometry:margin=1in',
+                  '--variable', 'fontsize=11pt',
+                  '--variable', 'mainfont=Noto Sans',
+                  '--variable', 'colorlinks=true',
+                  '--resource-path=build/png'
+              ]
+              
+              result = subprocess.run(cmd, capture_output=True, text=True)
+              
+              if pdf_path.exists():
+                  print(f"  ✓ PDF generated: {pdf_name}")
+              else:
+                  # Essayer avec pdflatex
+                  cmd[3] = '--pdf-engine=pdflatex'
+                  subprocess.run(cmd, capture_output=True)
+                  if pdf_path.exists():
+                      print(f"  ✓ PDF generated (pdflatex): {pdf_name}")
+                  else:
+                      print(f"  ✗ PDF failed: {result.stderr[:200]}")
+          
+          # Traiter tous les fichiers MD sous docs/
+          docs_dir = pathlib.Path('docs')
+          if docs_dir.exists():
+              md_files = list(docs_dir.rglob('*.md'))
+              print(f"🔍 Found {len(md_files)} markdown files\n")
+              
+              for md_file in md_files:
+                  process_markdown_file(md_file)
+              
+              # Stats
+              png_count = len(list(pathlib.Path('build/png').glob('*.png')))
+              pdf_count = len(list(pathlib.Path('build/pdf').glob('*.pdf')))
+              print(f"\n✅ Results: {png_count} PNGs, {pdf_count} PDFs")
+          else:
+              print("ERROR: docs/ directory not found")
+          PYTHON
+          
+          python3 process.py
+
+      - name: Verify outputs
+        run: |
+          echo "=== PNG files generated ==="
+          ls -la build/png/ 2>/dev/null || echo "No PNGs"
+          echo ""
+          echo "=== PDF files generated ==="
+          ls -la build/pdf/ 2>/dev/null || echo "No PDFs"
 
       - name: Create ZIP archives
         run: |
           cd build
           
-          # Archive des PDFs
-          if [ "$(ls -A pdf 2>/dev/null)" ]; then
+          # ZIP des PDFs
+          if [ -d "pdf" ] && [ "$(ls -A pdf 2>/dev/null)" ]; then
             zip -r PDFs.zip pdf/
-            echo "Created PDFs.zip with $(ls -1 pdf/*.pdf | wc -l) files"
+            echo "✓ Created PDFs.zip"
           else
-            echo "No PDFs found"
-            echo "No PDFs were generated" > pdf/README.txt
+            mkdir -p pdf
+            echo "No PDFs generated" > pdf/README.txt
             zip -r PDFs.zip pdf/
           fi
           
-          # Archive des PNGs (même si vide pour l'instant)
-          mkdir -p png
-          echo "PNG generation not implemented yet" > png/README.txt
-          zip -r PNGs.zip png/
+          # ZIP des PNGs
+          if [ -d "png" ] && [ "$(ls -A png 2>/dev/null)" ]; then
+            zip -r PNGs.zip png/
+            echo "✓ Created PNGs.zip"
+          else
+            mkdir -p png
+            echo "No PNGs generated" > png/README.txt
+            zip -r PNGs.zip png/
+          fi
           
           cd ..
 
-      - name: List generated files
-        run: |
-          echo "=== Files in build/ ==="
-          ls -la build/
-          echo ""
-          echo "=== PDFs generated ==="
-          ls -la build/pdf/ 2>/dev/null || echo "No PDFs"
-          echo ""
-          echo "=== ZIP contents ==="
-          if [ -f "build/PDFs.zip" ]; then
-            unzip -l build/PDFs.zip | head -20
-          fi
-
-      - name: Upload artifacts to Actions tab
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: documentation-outputs
-          path: build/
+          path: |
+            build/pdf/
+            build/png/
           retention-days: 30
 
       - name: Get date
         id: date
         run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
 
-      - name: Create GitHub Release
+      - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ github.run_number }}
-          name: "Build #${{ github.run_number }} - ${{ steps.date.outputs.date }}"
+          name: "Documentation Build #${{ github.run_number }} - ${{ steps.date.outputs.date }}"
           draft: false
           prerelease: ${{ github.ref != 'refs/heads/main' }}
           body: |
-            ## Documentation Build
+            ## 📚 Documentation Release
             
             **Date:** ${{ steps.date.outputs.date }}  
             **Branch:** ${{ github.ref_name }}  
             **Build:** #${{ github.run_number }}
             
-            ### Assets
+            ### 📦 Assets
             
-            - **PDFs.zip** - All PDF documents
-            - **PNGs.zip** - Diagrams (if any)
+            - **PDFs.zip** - Documents PDF avec diagrammes et emojis intégrés
+            - **PNGs.zip** - Tous les diagrammes Mermaid en PNG
             
-            Download the ZIP files below.
+            ### ✨ Contenu
+            
+            Les PDFs contiennent :
+            - Les diagrammes Mermaid convertis en images
+            - Support complet des emojis
+            - Mise en page professionnelle
+            
+            Les PNGs contiennent :
+            - Tous les diagrammes extraits des fichiers Markdown
+            - Prêts pour réutilisation
           files: |
             build/PDFs.zip
             build/PNGs.zip
