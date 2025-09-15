@@ -17,8 +17,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: Install dependencies
         run: |
+          # Installer mermaid-cli
+          npm install -g @mermaid-js/mermaid-cli
+          
+          # Installer pandoc et LaTeX
           sudo apt-get update
           sudo apt-get install -y \
             pandoc \
@@ -26,204 +35,199 @@ jobs:
             texlive-latex-extra \
             fonts-noto \
             fonts-noto-color-emoji \
-            python3-pip \
             chromium-browser
-          
-          # Installer Playwright au lieu de Puppeteer
-          pip3 install playwright
-          playwright install chromium
 
-      - name: Process files and generate outputs
+      - name: Process Markdown files
         run: |
           mkdir -p build/pdf
           mkdir -p build/png
-          mkdir -p build/temp
+          mkdir -p temp
           
-          # Script Python principal
+          # Créer config puppeteer
+          cat > puppeteer-config.json << 'JSON'
+          {
+            "executablePath": "/usr/bin/chromium-browser",
+            "args": ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+          }
+          JSON
+          
+          # Script de traitement
           cat > process.py << 'PYTHON'
           import os
           import re
           import subprocess
           import pathlib
-          from playwright.sync_api import sync_playwright
+          import shutil
           
           def clean_mermaid(code):
-              """Convertit la syntaxe non standard en syntaxe Mermaid valide"""
-              # node@{ shape: das, label: "text" } -> node["text"]
+              # Nettoyer syntaxe non standard
               code = re.sub(r'(\w+)@\{\s*shape:\s*das,\s*label:\s*"([^"]+)"\s*\}', r'\1["\2"]', code)
-              # Supprimer animations
               code = re.sub(r'\w+@\{\s*animation:\s*\w+\s*\}', '', code)
               code = re.sub(r'(\w+)\s+e\d+@', r'\1 ', code)
               return code
           
-          def render_mermaid_with_playwright(mermaid_code, output_path):
-              """Utilise Playwright pour rendre Mermaid en PNG"""
-              try:
-                  cleaned = clean_mermaid(mermaid_code)
-                  
-                  html_content = f"""
-                  <!DOCTYPE html>
-                  <html>
-                  <head>
-                      <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
-                      <style>
-                          body {{ margin: 0; padding: 20px; background: white; }}
-                          #diagram {{ text-align: center; }}
-                      </style>
-                  </head>
-                  <body>
-                      <div id="diagram" class="mermaid">
-                      {cleaned}
-                      </div>
-                      <script>
-                          mermaid.initialize({{ 
-                              startOnLoad: true,
-                              theme: 'default',
-                              themeVariables: {{
-                                  fontSize: '16px'
-                              }}
-                          }});
-                      </script>
-                  </body>
-                  </html>
-                  """
-                  
-                  # Sauvegarder HTML temporaire
-                  temp_html = pathlib.Path("build/temp/temp.html")
-                  temp_html.write_text(html_content, encoding='utf-8')
-                  
-                  # Rendre avec Playwright
-                  with sync_playwright() as p:
-                      browser = p.chromium.launch(args=['--no-sandbox'])
-                      page = browser.new_page()
-                      page.goto(f"file://{temp_html.absolute()}")
-                      page.wait_for_timeout(2000)  # Attendre le rendu
-                      
-                      # Capturer le diagramme
-                      diagram = page.query_selector('#diagram')
-                      if diagram:
-                          diagram.screenshot(path=str(output_path))
-                          print(f"    ✓ PNG: {output_path.name}")
-                      browser.close()
-                      
-                  return True
-              except Exception as e:
-                  print(f"    ✗ PNG failed: {str(e)[:100]}")
-                  return False
-          
-          def process_markdown(md_path):
-              """Traite un fichier Markdown"""
-              print(f"\n📄 Processing: {md_path}")
-              
+          def process_file(md_path):
+              print(f"\nProcessing: {md_path}")
               content = md_path.read_text(encoding='utf-8')
-              mermaid_blocks = re.findall(r'^```mermaid\s*\n(.*?)\n```', content, re.MULTILINE | re.DOTALL)
               
-              print(f"  Found {len(mermaid_blocks)} mermaid blocks")
-              
-              # Remplacer les blocs mermaid
+              # Trouver et remplacer les blocs mermaid
               counter = 0
-              def replace_block(match):
+              def replace_mermaid(match):
                   nonlocal counter
+                  code = clean_mermaid(match.group(1))
+                  
+                  # Générer nom unique
                   stem = str(md_path.relative_to('docs')).replace('/', '_').replace('.md', '')
                   png_name = f"{stem}_{counter}.png"
                   png_path = pathlib.Path(f"build/png/{png_name}")
                   
-                  # Essayer de générer le PNG
-                  code = match.group(1)
-                  if render_mermaid_with_playwright(code, png_path):
-                      result = f"![](../png/{png_name})"
-                  else:
-                      # Fallback: garder le code si échec
-                      result = f"```\n[Diagram rendering failed]\n```"
+                  # Créer fichier mermaid temporaire
+                  mmd_file = pathlib.Path(f"temp/temp_{counter}.mmd")
+                  mmd_file.write_text(code, encoding='utf-8')
                   
-                  counter += 1
-                  return result
+                  # Générer PNG avec mmdc
+                  cmd = [
+                      'mmdc', '-i', str(mmd_file), '-o', str(png_path),
+                      '-p', 'puppeteer-config.json',
+                      '--width', '1200', '--height', '800'
+                  ]
+                  
+                  try:
+                      result = subprocess.run(cmd, capture_output=True, timeout=30)
+                      if png_path.exists():
+                          print(f"  ✓ Generated PNG: {png_name}")
+                          counter += 1
+                          return f"![](../png/{png_name})"
+                      else:
+                          print(f"  ✗ PNG failed")
+                          return match.group(0)  # Garder le bloc original
+                  except:
+                      print(f"  ✗ PNG error")
+                      return match.group(0)
               
-              # Remplacer tous les blocs
+              # Remplacer tous les blocs mermaid
               pattern = re.compile(r'^```mermaid\s*\n(.*?)\n```', re.MULTILINE | re.DOTALL)
-              processed = pattern.sub(replace_block, content)
+              processed = pattern.sub(replace_mermaid, content)
               
-              # Sauvegarder le MD traité
-              temp_md = pathlib.Path(f"build/temp/{md_path.name}")
+              # Sauvegarder le MD traité temporairement
+              temp_md = pathlib.Path(f"temp/{md_path.name}")
               temp_md.write_text(processed, encoding='utf-8')
               
               # Générer PDF
               pdf_name = str(md_path.relative_to('docs')).replace('/', '_').replace('.md', '.pdf')
               pdf_path = pathlib.Path(f"build/pdf/{pdf_name}")
               
-              # D'abord essayer XeLaTeX pour les emojis
-              result = subprocess.run([
-                  'pandoc', str(temp_md),
-                  '-o', str(pdf_path),
+              # Essayer avec XeLaTeX pour les emojis
+              cmd = [
+                  'pandoc', str(temp_md), '-o', str(pdf_path),
                   '--pdf-engine=xelatex',
                   '--variable', 'geometry:margin=1in',
-                  '--variable', 'mainfont=Noto Sans',
-                  '--from', 'markdown',
-                  '--to', 'pdf'
-              ], capture_output=True, text=True, cwd='build/temp')
+                  '--variable', 'mainfont=Noto Sans'
+              ]
+              
+              result = subprocess.run(cmd, capture_output=True, cwd='temp')
+              
+              if not pdf_path.exists():
+                  # Fallback pdflatex
+                  subprocess.run(['pandoc', str(temp_md), '-o', str(pdf_path)], cwd='temp')
               
               if pdf_path.exists():
-                  print(f"    ✓ PDF: {pdf_name}")
+                  print(f"  ✓ Generated PDF: {pdf_name}")
               else:
-                  # Essayer pdflatex en fallback
-                  subprocess.run([
-                      'pandoc', str(temp_md),
-                      '-o', str(pdf_path),
-                      '--pdf-engine=pdflatex'
-                  ], capture_output=True, cwd='build/temp')
-                  
-                  if pdf_path.exists():
-                      print(f"    ✓ PDF (pdflatex): {pdf_name}")
-                  else:
-                      print(f"    ✗ PDF failed")
+                  print(f"  ✗ PDF failed")
           
-          # Traiter tous les fichiers sous docs/
-          docs_path = pathlib.Path('docs')
-          if docs_path.exists():
-              md_files = list(docs_path.rglob('*.md'))
-              print(f"🔍 Found {len(md_files)} files under docs/\n")
-              
-              for md_file in md_files:
-                  process_markdown(md_file)
+          # Traiter tous les MD sous docs/
+          docs_dir = pathlib.Path('docs')
+          if docs_dir.exists():
+              for md_file in docs_dir.rglob('*.md'):
+                  process_file(md_file)
           
-          # Résumé
-          png_files = list(pathlib.Path('build/png').glob('*.png'))
-          pdf_files = list(pathlib.Path('build/pdf').glob('*.pdf'))
-          
-          print(f"\n✅ RESULTS:")
-          print(f"  - {len(png_files)} PNG files in build/png/")
-          print(f"  - {len(pdf_files)} PDF files in build/pdf/")
+          # Stats finales
+          png_count = len(list(pathlib.Path('build/png').glob('*.png')))
+          pdf_count = len(list(pathlib.Path('build/pdf').glob('*.pdf')))
+          print(f"\n✅ Generated: {png_count} PNGs, {pdf_count} PDFs")
           PYTHON
           
           python3 process.py
 
-      - name: Display results
+      - name: Verify outputs
         run: |
           echo "=== PNG files ==="
-          ls -la build/png/ 2>/dev/null || echo "No PNG files"
+          ls -la build/png/ || echo "No PNG"
           echo ""
           echo "=== PDF files ==="
-          ls -la build/pdf/ 2>/dev/null || echo "No PDF files"
+          ls -la build/pdf/ || echo "No PDF"
+
+      - name: Create archives for release
+        run: |
+          cd build
+          
+          # Créer archive ZIP des PDFs
+          if [ -d "pdf" ] && [ "$(ls -A pdf)" ]; then
+            zip -r PDFs.zip pdf/
+            echo "✓ Created PDFs.zip"
+          else
+            echo "No PDFs to archive"
+            echo "No PDFs generated" > PDFs.txt
+            zip PDFs.zip PDFs.txt
+          fi
+          
+          # Créer archive ZIP des PNGs
+          if [ -d "png" ] && [ "$(ls -A png)" ]; then
+            zip -r PNGs.zip png/
+            echo "✓ Created PNGs.zip"
+          else
+            echo "No PNGs to archive"
+            echo "No PNGs generated" > PNGs.txt
+            zip PNGs.zip PNGs.txt
+          fi
+          
+          cd ..
+
+      - name: Upload as GitHub Artifacts (for Actions tab)
+        uses: actions/upload-artifact@v3
+        with:
+          name: documentation-outputs
+          path: |
+            build/pdf/
+            build/png/
 
       - name: Get current date
         id: date
         run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
 
-      - name: Create Release
+      - name: Create Release with assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ github.run_number }}
-          name: "Build #${{ github.run_number }} - ${{ steps.date.outputs.date }}"
+          name: "Documentation Build #${{ github.run_number }} - ${{ steps.date.outputs.date }}"
           draft: false
           prerelease: ${{ github.ref != 'refs/heads/main' }}
           body: |
-            ## Documentation Build
+            ## 📚 Documentation Release
             
-            - **Date:** ${{ steps.date.outputs.date }}
-            - **Branch:** ${{ github.ref_name }}
+            **Date:** ${{ steps.date.outputs.date }}  
+            **Branch:** ${{ github.ref_name }}  
+            **Build:** #${{ github.run_number }}
             
-            ### Outputs
-            - PDF files: `build/pdf/`
-            - PNG diagrams: `build/png/`
+            ### 📦 Assets
+            
+            - **PDFs.zip** - Tous les documents PDF avec emojis et diagrammes intégrés
+            - **PNGs.zip** - Tous les diagrammes Mermaid exportés en PNG
+            
+            ### 📄 Contenu
+            
+            Les PDFs contiennent :
+            - Documentation complète depuis `/docs`
+            - Diagrammes Mermaid convertis et intégrés
+            - Support des emojis 🚀
+            
+            ### 💡 Usage
+            
+            1. Téléchargez `PDFs.zip` pour la documentation complète
+            2. Téléchargez `PNGs.zip` pour les diagrammes seuls
+          files: |
+            build/PDFs.zip
+            build/PNGs.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
