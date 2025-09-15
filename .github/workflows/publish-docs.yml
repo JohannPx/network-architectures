@@ -148,6 +148,11 @@ jobs:
               pdf_name = str(md_path.relative_to(pathlib.Path('docs'))).replace('/', '_').replace('.md', '.pdf')
               pdf_path = pathlib.Path(f"build/pdf/{pdf_name}")
               
+              # Ne pas générer de PDF pour les fichiers vides ou très courts
+              if len(processed_content.strip()) < 10:
+                  print(f"  → Fichier trop court, pas de PDF généré")
+                  return
+              
               # Convertir en PDF avec XeLaTeX pour les emojis du texte
               cmd = [
                   'pandoc', str(temp_md),
@@ -171,7 +176,7 @@ jobs:
                   if pdf_path.exists():
                       print(f"  ✓ PDF (pdflatex): {pdf_name}")
                   else:
-                      print(f"  ✗ PDF failed: {result.stderr[:200]}")
+                      print(f"  ✗ PDF failed")
           
           # Traiter tous les fichiers MD sous docs/
           docs_dir = pathlib.Path('docs')
