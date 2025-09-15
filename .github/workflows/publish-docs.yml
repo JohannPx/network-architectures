@@ -36,17 +36,17 @@ jobs:
           mkdir -p build/png
           mkdir -p build/temp
           
-          # Script Python qui convertit Mermaid en PNG via Kroki.io
+          # Script Python qui convertit Mermaid en PNG avec support emojis
           cat > process.py << 'PYTHON'
           import re
           import pathlib
           import subprocess
           import requests
           import base64
-          import zlib
+          import urllib.parse
           
           def clean_mermaid_syntax(code):
-              """Nettoie la syntaxe Mermaid non standard"""
+              """Nettoie la syntaxe Mermaid non standard MAIS garde les emojis"""
               # Remplacer @{ shape: das, label: "..." } par ["..."]
               code = re.sub(r'(\w+)@\{\s*shape:\s*das,\s*label:\s*"([^"]+)"\s*\}', r'\1["\2"]', code)
               # Supprimer les animations
@@ -54,31 +54,56 @@ jobs:
               code = re.sub(r'(\w+)\s+e\d+@', r'\1 ', code)
               return code
           
-          def mermaid_to_png_kroki(mermaid_code, output_path):
-              """Convertit Mermaid en PNG via Kroki.io"""
+          def mermaid_to_png_with_emojis(mermaid_code, output_path):
+              """Convertit Mermaid en PNG via mermaid.ink (supporte les emojis)"""
               try:
-                  # Nettoyer le code
+                  # Nettoyer le code MAIS garder les emojis
                   cleaned = clean_mermaid_syntax(mermaid_code)
                   
-                  # Encoder pour Kroki
-                  compressed = zlib.compress(cleaned.encode('utf-8'), 9)
-                  encoded = base64.urlsafe_b64encode(compressed).decode('ascii')
+                  # Encoder pour mermaid.ink
+                  encoded = base64.b64encode(cleaned.encode('utf-8')).decode('ascii')
                   
-                  # Appeler Kroki
-                  url = f"https://kroki.io/mermaid/png/{encoded}"
-                  response = requests.get(url, timeout=30)
+                  # Utiliser mermaid.ink qui supporte les emojis
+                  url = f"https://mermaid.ink/img/{encoded}?type=png"
+                  
+                  # Headers pour éviter le blocage
+                  headers = {
+                      'User-Agent': 'Mozilla/5.0 (compatible; GitHub-Actions)',
+                      'Accept': 'image/png'
+                  }
+                  
+                  response = requests.get(url, headers=headers, timeout=30)
                   
                   if response.status_code == 200:
                       output_path.parent.mkdir(parents=True, exist_ok=True)
                       output_path.write_bytes(response.content)
-                      print(f"    ✓ PNG generated: {output_path.name}")
+                      print(f"    ✓ PNG avec emojis: {output_path.name}")
                       return True
                   else:
-                      print(f"    ✗ Kroki error: {response.status_code}")
-                      return False
+                      print(f"    ✗ Erreur mermaid.ink: {response.status_code}")
+                      # Fallback sur Kroki sans emojis
+                      return mermaid_to_png_kroki_fallback(cleaned, output_path)
               except Exception as e:
-                  print(f"    ✗ Error: {str(e)[:100]}")
-                  return False
+                  print(f"    ✗ Erreur: {str(e)[:100]}")
+                  # Fallback sur Kroki
+                  return mermaid_to_png_kroki_fallback(cleaned, output_path)
+          
+          def mermaid_to_png_kroki_fallback(mermaid_code, output_path):
+              """Fallback sur Kroki si mermaid.ink échoue"""
+              try:
+                  import zlib
+                  compressed = zlib.compress(mermaid_code.encode('utf-8'), 9)
+                  encoded = base64.urlsafe_b64encode(compressed).decode('ascii')
+                  url = f"https://kroki.io/mermaid/png/{encoded}"
+                  response = requests.get(url, timeout=30)
+                  
+                  if response.status_code == 200:
+                      output_path.write_bytes(response.content)
+                      print(f"    ✓ PNG (sans emojis via Kroki): {output_path.name}")
+                      return True
+              except:
+                  pass
+              return False
           
           def process_markdown_file(md_path):
               """Traite un fichier Markdown"""
@@ -102,13 +127,13 @@ jobs:
                   png_name = f"{stem}_{counter}.png"
                   png_path = pathlib.Path(f"build/png/{png_name}")
                   
-                  # Convertir en PNG via Kroki
-                  if mermaid_to_png_kroki(code, png_path):
+                  # Convertir en PNG avec emojis
+                  if mermaid_to_png_with_emojis(code, png_path):
                       counter += 1
                       # Retourner l'image pour le MD
                       return f"\n![Diagram]({png_path.absolute()})\n"
                   else:
-                      # Si échec, garder le code
+                      # Si échec total, garder le code
                       return match.group(0)
               
               # Remplacer tous les blocs
@@ -123,7 +148,7 @@ jobs:
               pdf_name = str(md_path.relative_to(pathlib.Path('docs'))).replace('/', '_').replace('.md', '.pdf')
               pdf_path = pathlib.Path(f"build/pdf/{pdf_name}")
               
-              # Convertir en PDF avec XeLaTeX pour les emojis
+              # Convertir en PDF avec XeLaTeX pour les emojis du texte
               cmd = [
                   'pandoc', str(temp_md),
                   '-o', str(pdf_path),
@@ -138,13 +163,13 @@ jobs:
               result = subprocess.run(cmd, capture_output=True, text=True)
               
               if pdf_path.exists():
-                  print(f"  ✓ PDF generated: {pdf_name}")
+                  print(f"  ✓ PDF avec emojis: {pdf_name}")
               else:
                   # Essayer avec pdflatex
                   cmd[3] = '--pdf-engine=pdflatex'
                   subprocess.run(cmd, capture_output=True)
                   if pdf_path.exists():
-                      print(f"  ✓ PDF generated (pdflatex): {pdf_name}")
+                      print(f"  ✓ PDF (pdflatex): {pdf_name}")
                   else:
                       print(f"  ✗ PDF failed: {result.stderr[:200]}")
           
@@ -160,7 +185,7 @@ jobs:
               # Stats
               png_count = len(list(pathlib.Path('build/png').glob('*.png')))
               pdf_count = len(list(pathlib.Path('build/pdf').glob('*.pdf')))
-              print(f"\n✅ Results: {png_count} PNGs, {pdf_count} PDFs")
+              print(f"\n✅ Results: {png_count} PNGs avec emojis, {pdf_count} PDFs")
           else:
               print("ERROR: docs/ directory not found")
           PYTHON
