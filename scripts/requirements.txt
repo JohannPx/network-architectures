@@ -1,0 +1,2 @@
+# Dépendances Python (minimales)
+requests>=2.32.0

@@ -38,3 +38,11 @@ yarn-error.log*
 # ---- OS cache ----
 ehthumbs.db
 Icon?
+
+# ---- Build local (docs → PNG/PDF/temp) ----
+build/
+!build/.gitkeep   # si tu veux garder le dossier vide versionné
+
+# ---- Devcontainer ----
+.devcontainer/.venv/
+.devcontainer/*.log
