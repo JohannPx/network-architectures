@@ -5,7 +5,6 @@
     "context": ".."
   },
   "features": {
-    "ghcr.io/devcontainers/features/node:1": { "version": "lts" },
     "ghcr.io/devcontainers/features/python:1": { "version": "3.11" }
   },
   "customizations": {
@@ -21,11 +20,12 @@
       ]
     }
   },
-  "updateContentCommand": "pip3 install -r scripts/requirements.txt",
-  "postCreateCommand": "npm i -g @mermaid-js/mermaid-cli@latest",
-  "mounts": [
-    "source=${localWorkspaceFolder},target=/workspaces/app,type=bind,consistency=cached"
-  ],
-  "workspaceFolder": "/workspaces/app",
+
+  "postCreateCommand": "test -f scripts/requirements.txt && pip3 install -r scripts/requirements.txt || true",
+
+  // ⬇️ IMPORTANT : dossier de travail = nom du dossier local
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+
+  // Laisse VS Code faire le bind-mount par défaut (ne pas surcharger "mounts")
   "remoteUser": "vscode"
 }

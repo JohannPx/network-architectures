@@ -1,31 +1,13 @@
-# Base minimale Debian + Pandoc + TeX Live + polices Noto + mmdc (offline mermaid)
+# Image de base Debian (bookworm) adaptée VS Code
 FROM mcr.microsoft.com/vscode/devcontainers/base:bookworm
 
-
-# Versions/vars
-ENV DEBIAN_FRONTEND=noninteractive \
-LANG=C.UTF-8
-
-
-# Pandoc + TeX Live (XeLaTeX) + Noto fonts + utilitaires
+# Pandoc + TeX Live complet (fiable) + polices Noto + outils nécessaires
 RUN apt-get update && apt-get install -y --no-install-recommends \
-pandoc \
-texlive-xetex texlive-latex-recommended texlive-latex-extra \
-texlive-fonts-recommended lmodern \
-fonts-noto-core fonts-noto-extra fonts-noto-color-emoji fonts-noto-mono \
-ca-certificates curl git make python3-pip python3-venv \
-&& rm -rf /var/lib/apt/lists/*
+    pandoc \
+    texlive-full \
+    fonts-noto-core fonts-noto-extra fonts-noto-color-emoji fonts-noto-mono \
+    python3-pip python3-venv make git curl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
 
-
-# Dépendances Chromium pour puppeteer (mmdc utilisera ce binaire)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-chromium \
-&& rm -rf /var/lib/apt/lists/*
-
-
-# Liens pour puppeteer → chromium
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
-
-
-# Répertoire de travail
+# Dossier de travail
 WORKDIR /workspaces/app

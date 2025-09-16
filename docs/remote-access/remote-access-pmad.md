@@ -13,8 +13,8 @@ flowchart BT
 
     subgraph site [🏭 Site client]
         fw(🛡️ Pare-feu 🧱)
-        jumpAera@{ shape: das, label: "Zone de rebond" }
-        vlanAutomation@{ shape: das, label: "VLAN dédié" }
+        jumpAera(Zone de rebond)
+        vlanAutomation(VLAN dédié)
         jumpServer([🖥️ Poste de rebond
         ou
         GTC])
@@ -25,24 +25,13 @@ flowchart BT
         end
     end
 
-    remote e2@== 🔒 ==> pmad
-    e2@{ animation: fast }
-
-    fw e1@== 🔒 ==> pmad
-    e1@{ animation: fast }
-
-    jumpAera e3@ == 🔒 === fw
-    e3@{ animation: fast }
-
-    jumpServer e4@ == 🔒 === jumpAera
-    e4@{ animation: fast }
-
+    remote == 🔒 ==> pmad
+    fw == 🔒 ==> pmad
+    jumpAera == 🔒 === fw
+    jumpServer == 🔒 === jumpAera
     vlanAutomation === fw
-
     automation === vlanAutomation
-
     jumpServer --- jumpAera
-
     jumpAera --- fw
 
     linkStyle 0 stroke:orange,stroke-width:3px,color:orange;

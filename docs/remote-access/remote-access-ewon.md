@@ -22,7 +22,7 @@ flowchart BT
             gtc([💻 GTC])
         end
 
-        vlan@{ shape: das, label: "LAN autonome ou VLAN dédié" }
+        vlan(LAN autonome ou VLAN dédié)
         
         subgraph ewon [🖴 Ewon]
             ewonLan([🔌 LAN])
@@ -32,24 +32,13 @@ flowchart BT
 
     talk2m((☁️ Talk2M 🧱))
 
-    remote e2@== 🔒 VPN ==> talk2m
-    e2@{ animation: fast }
-
-    ewon e1@== 🔒 VPN ==> talk2m
-    e1@{ animation: fast }
-
-
+    remote == 🔒 VPN ==> talk2m
+    ewon == 🔒 VPN ==> talk2m
     automation === vlan
     vlan === ewon
     
     linkStyle 0 stroke:orange,stroke-width:3px,color:orange;
     linkStyle 1 stroke:orange,stroke-width:3px,color:orange;
-
-    style ewon fill:orange,stroke:#333,stroke-width:1px
-    style automation fill:green,stroke:#333,stroke-width:1px
-
-    class automation rightTitle
-    class ewon rightTitle
 ```
 
 ### Légende

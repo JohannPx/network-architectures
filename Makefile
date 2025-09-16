@@ -2,22 +2,20 @@ PY ?= python3
 DOCS ?= docs
 OUT ?= build
 
-.PHONY: setup build build-offline clean watch
+.PHONY: setup build clean watch
 
 setup:
-	$(PY) -m pip install -r scripts/requirements.txt     # ⟶ TAB au début
+	$(PY) -m pip install -r scripts/requirements.txt
 
+# Build: rend les Mermaid en PNG (services en ligne), remplace dans le MD, puis Pandoc → PDF
 build:
-	$(PY) scripts/process.py --docs $(DOCS) --out $(OUT)  # ⟶ TAB
-
-build-offline:
-	$(PY) scripts/process.py --docs $(DOCS) --out $(OUT) --offline  # ⟶ TAB
+	$(PY) scripts/process.py --docs $(DOCS) --out $(OUT)
 
 clean:
-	rm -rf $(OUT)                                        # ⟶ TAB
+	rm -rf $(OUT)
 
-# Rebuild auto (nécessite watchdog)
+# Rebuild auto (nécessite watchdog installé)
 watch:
 	$(PY) -m watchdog.cli.watchmedo shell-command \
 	  --patterns="*.md" --recursive \
-	  --command='$(PY) scripts/process.py --docs $(DOCS) --out $(OUT)' $(DOCS)   # ⟶ TAB
+	  --command='$(PY) scripts/process.py --docs $(DOCS) --out $(OUT)' $(DOCS)

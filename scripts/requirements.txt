@@ -1,2 +1,2 @@
-# Dépendances Python (minimales)
 requests>=2.32.0
+watchdog>=4.0.0

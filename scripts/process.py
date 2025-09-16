@@ -1,27 +1,19 @@
-# Usage: python3 scripts/process.py [--docs docs] [--out build]
-# - Parcourt les .md, convertit les blocs ```mermaid``` en PNG (cache par hash),
-# - écrit des .md "nettoyés" dans build/temp,
-# - génère les PDF via Pandoc + XeLaTeX.
-
 import argparse
 import base64
 import hashlib
-import os
 import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-try:
-    import requests
-except ImportError:
-    requests = None
+import requests
 
-MERMAID_BLOCK_RE = re.compile(
-    r"(^|\n)```mermaid\n(.*?)\n```",
-    flags=re.DOTALL | re.IGNORECASE,
-)
+# --- Détection des blocs Mermaid ---
+MERMAID_BLOCK = re.compile(
+    r"(^|\n)```mermaid\s*\n(.*?)\n```", re.DOTALL | re.IGNORECASE)
+# --- Extraction du premier H1 ---
+H1_RE = re.compile(r"^\s*#\s+(.+?)\s*$", re.MULTILINE)
 
 
 def sha1(text: str) -> str:
@@ -33,104 +25,137 @@ def ensure_dirs(*paths: Path):
         p.mkdir(parents=True, exist_ok=True)
 
 
-def have_cmd(cmd: str) -> bool:
-    return shutil.which(cmd) is not None
-
-
-def render_mermaid_to_png(code: str, out_path: Path, offline_preferred: bool = False) -> None:
+def render_mermaid_png_online(code: str) -> bytes:
     """
-    Stratégie multi-backend :
-    1) mmdc (offline) si dispo et demandé/préféré
-    2) Kroki (HTTP POST /mermaid/png)
-    3) mermaid.ink (GET)
-    Lève une exception si tous échouent.
+    1) mermaid.ink (GET /img/<b64>)
+    2) fallback kroki.io (POST /mermaid/png)
     """
-    last_err = None
-
-    # 1) mmdc (offline)
-    if offline_preferred and have_cmd("mmdc"):
-        try:
-            # mmdc demande un fichier d'entrée
-            tmp = out_path.with_suffix(".mmd")
-            tmp.write_text(code, encoding="utf-8")
-            subprocess.run([
-                "mmdc", "-i", str(tmp), "-o", str(out_path), "-b", "transparent", "-q", "100",
-            ], check=True)
-            tmp.unlink(missing_ok=True)
-            return
-        except Exception as e:
-            last_err = e
-
-    # 2) Kroki
-    if requests is not None:
-        try:
-            url = "https://kroki.io/mermaid/png"
-            r = requests.post(url, data=code.encode("utf-8"), timeout=30)
-            r.raise_for_status()
-            out_path.write_bytes(r.content)
-            return
-        except Exception as e:
-            last_err = e
-
-    # 3) mermaid.ink
+    # mermaid.ink
     try:
-        # mermaid.ink attend un deflate+base64 URL-safe; on tente simple base64 utf-8 (compat mermaid.ink non-compressé)
-        # Pour une meilleure compat, on pourrait deflater; la plupart des serveurs acceptent aussi du b64 brut.
         b64 = base64.urlsafe_b64encode(code.encode("utf-8")).decode("ascii")
-        ink_url = f"https://mermaid.ink/img/{b64}"
-        if requests is None:
-            raise RuntimeError("'requests' non installé pour mermaid.ink")
-        r = requests.get(ink_url, timeout=30)
+        url = f"https://mermaid.ink/img/{b64}"
+        r = requests.get(url, timeout=30)
         r.raise_for_status()
-        out_path.write_bytes(r.content)
-        return
+        if r.content and r.headers.get("content-type", "").startswith("image/"):
+            return r.content
+    except Exception:
+        pass
+
+    # kroki.io
+    try:
+        url = "https://kroki.io/mermaid/png"
+        r = requests.post(url, data=code.encode("utf-8"), timeout=30)
+        r.raise_for_status()
+        if r.content:
+            return r.content
     except Exception as e:
-        last_err = e
+        raise RuntimeError(f"Échec de rendu Mermaid en ligne: {e}")
 
-    raise RuntimeError(f"Échec rendu Mermaid pour {out_path.name}: {last_err}")
+    raise RuntimeError(
+        "Impossible d'obtenir une image Mermaid depuis les services en ligne.")
 
 
-def replace_mermaid_with_images(md_text: str, png_dir: Path, rel_img_prefix: str, offline_preferred: bool) -> str:
-    def _repl(match: re.Match) -> str:
-        code = match.group(2).strip()
-        h = sha1(code)[:16]
-        png_name = f"mermaid_{h}.png"
+def replace_mermaid_with_images(md_text: str, png_dir: Path, rel_img_prefix: str) -> str:
+    """
+    Remplace chaque bloc ```mermaid ... ``` par ![diagram](build/png/xxx.png)
+    (images non flottantes car on désactive implicit_figures côté Pandoc).
+    """
+    def _repl(m: re.Match) -> str:
+        code = m.group(2).strip()
+        digest = sha1(code)[:16]
+        png_name = f"mermaid_{digest}.png"
         png_path = png_dir / png_name
         if not png_path.exists():
-            render_mermaid_to_png(code, png_path, offline_preferred=offline_preferred)
-        # Chemin RELATIF dans le MD pour portabilité
+            png_path.write_bytes(render_mermaid_png_online(code))
         return f"\n![diagram]({rel_img_prefix}/{png_name})\n"
 
-    return MERMAID_BLOCK_RE.sub(_repl, md_text)
+    return MERMAID_BLOCK.sub(_repl, md_text)
 
 
-def run_pandoc(src_md: Path, out_pdf: Path, resource_path: Path, main_font: str = "Noto Sans", mono_font: str = "Noto Sans Mono"):
+def extract_h1_title(md_text: str) -> tuple[str | None, str]:
+    """
+    Renvoie (title, body_without_first_h1).
+    Si un H1 existe, on l'extrait comme titre ET on le supprime du corps pour éviter le doublon en PDF.
+    """
+    m = H1_RE.search(md_text)
+    if not m:
+        return None, md_text
+    title = m.group(1).strip()
+    start, end = m.span()
+    # supprime la ligne H1 (et une éventuelle ligne vide qui suit)
+    body = (md_text[:start] + md_text[end:]).lstrip("\n")
+    return title, body
+
+
+def default_title_for(md_path: Path) -> str:
+    return (md_path.stem.replace("_", " ").strip()) or "Document"
+
+
+def write_header_tex(header_path: Path):
+    """
+    Header LaTeX :
+      - pas de numéros de page
+      - Noto Color Emoji pour les emojis
+    """
+    content = r"""
+\usepackage{fontspec}
+\pagestyle{empty} % pas de numéros de page
+
+% HarfBuzz = moteur moderne, meilleur rendu
+\defaultfontfeatures{Renderer=Harfbuzz, Ligatures=TeX}
+
+% Emoji : police dédiée
+\newfontfamily\emoji{Noto Color Emoji}[Renderer=Harfbuzz]
+"""
+    header_path.parent.mkdir(parents=True, exist_ok=True)
+    header_path.write_text(content.strip() + "\n", encoding="utf-8")
+
+
+def run_pandoc(input_md: Path, output_pdf: Path, resource_path: Path, title: str, header_tex: Path = Path("build/latex/header.tex")):
+    """
+    Convertit un fichier Markdown en PDF avec Pandoc et LuaLaTeX.
+    - input_md: chemin vers le .md temporaire
+    - output_pdf: chemin du PDF de sortie
+    - resource_path: répertoire contenant les images (png)
+    - title: titre à utiliser (extrait du # du Markdown)
+    - header_tex: fichier header.tex optionnel pour configurer LaTeX
+    """
     cmd = [
         "pandoc",
-        str(src_md),
-        "--from=markdown+emoji",
+        str(input_md),
+        "--from=markdown+emoji-implicit_figures",
         "--to=pdf",
         f"--resource-path={resource_path}",
-        "--pdf-engine=xelatex",
-        "-V", f"mainfont={main_font}",
-        "-V", f"monofont={mono_font}",
+        "--pdf-engine=lualatex",
         "-V", "geometry:margin=2.2cm",
         "-V", "colorlinks=true",
         "-V", "linkcolor=blue",
-        "-o", str(out_pdf),
+        "--variable", "graphics:yes",
+        "--variable", "fig-pos=H",
+        "--metadata", f"title={title}",
+        "-o", str(output_pdf),
     ]
-    subprocess.run(cmd, check=True)
+
+    if header_tex and Path(header_tex).exists():
+        cmd.extend(["-H", str(header_tex)])
+
+        print(f"→ Pandoc: {input_md} → {output_pdf}")
+        subprocess.run(cmd, check=True)
 
 
-def process_all(docs_dir: Path, build_dir: Path, offline_preferred: bool):
+def process_all(docs_dir: Path, build_dir: Path):
     png_dir = build_dir / "png"
     temp_dir = build_dir / "temp"
     pdf_dir = build_dir / "pdf"
-    ensure_dirs(png_dir, temp_dir, pdf_dir)
+    latex_dir = build_dir / "latex"  # pour header.tex
 
-    md_files = sorted(list(docs_dir.rglob("*.md")))
+    ensure_dirs(png_dir, temp_dir, pdf_dir, latex_dir)
+    header_tex = latex_dir / "header.tex"
+    write_header_tex(header_tex)
+
+    md_files = sorted(docs_dir.rglob("*.md"))
     if not md_files:
-        print(f"Aucun .md trouvé sous {docs_dir}")
+        print(f"Aucun .md trouvé dans {docs_dir}")
         return
 
     for md in md_files:
@@ -138,31 +163,52 @@ def process_all(docs_dir: Path, build_dir: Path, offline_preferred: bool):
         cleaned_md = temp_dir / rel
         cleaned_md.parent.mkdir(parents=True, exist_ok=True)
 
-        text = md.read_text(encoding="utf-8")
-        text2 = replace_mermaid_with_images(text, png_dir, rel_img_prefix=str(Path("..") / "png" if cleaned_md.parent != temp_dir else Path("png")), offline_preferred=offline_preferred)
-        cleaned_md.write_text(text2, encoding="utf-8")
+        raw = md.read_text(encoding="utf-8")
 
+        # 1) Titre = 1er H1, et retrait du H1 du corps
+        title, body_wo_h1 = extract_h1_title(raw)
+        if not title:
+            title = default_title_for(md)
+            body_wo_h1 = raw
+
+        # 2) Remplacement Mermaid -> PNG (images inline)
+        rel_prefix = str(
+            Path("..") / "png" if cleaned_md.parent != temp_dir else Path("png"))
+        replaced = replace_mermaid_with_images(
+            body_wo_h1, png_dir=png_dir, rel_img_prefix=rel_prefix)
+
+        # 3) Si doc vide après nettoyage, injecter un titre minimal pour éviter "No pages of output"
+        if not replaced.strip():
+            replaced = f"# {title}\n"
+
+        cleaned_md.write_text(replaced, encoding="utf-8")
+
+        # 4) PDF
         out_pdf = (pdf_dir / rel).with_suffix(".pdf")
         out_pdf.parent.mkdir(parents=True, exist_ok=True)
+
         print(f"→ Pandoc: {rel} → {out_pdf.relative_to(pdf_dir)}")
-        run_pandoc(cleaned_md, out_pdf, resource_path=png_dir)
+        run_pandoc(cleaned_md, out_pdf, resource_path=png_dir,
+                   title=title, header_tex=header_tex)
+
+    print("OK ✅")
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--docs", default="docs", type=str, help="Dossier des sources .md")
-    ap.add_argument("--out", default="build", type=str, help="Dossier de sortie (png/temp/pdf)")
-    ap.add_argument("--offline", action="store_true", help="Privilégier le rendu Mermaid offline (mmdc) si dispo")
+    ap.add_argument("--docs", default="docs", type=str,
+                    help="Dossier des sources .md")
+    ap.add_argument("--out", default="build", type=str,
+                    help="Dossier de sortie (png/temp/pdf)")
     args = ap.parse_args()
 
     docs_dir = Path(args.docs).resolve()
     build_dir = Path(args.out).resolve()
 
     try:
-        process_all(docs_dir, build_dir, offline_preferred=args.offline)
-        print("OK ✅")
+        process_all(docs_dir, build_dir)
     except subprocess.CalledProcessError as e:
-        print("Erreur d'exécution:", e, file=sys.stderr)
+        print("Erreur d'exécution Pandoc:", e, file=sys.stderr)
         sys.exit(e.returncode or 1)
     except Exception as e:
         print("Erreur:", e, file=sys.stderr)
