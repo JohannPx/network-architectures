@@ -3,16 +3,19 @@ name: Build & Publish Docs
 on:
   push:
     branches: [ "main" ]
-    tags:     [ "v*" ]     # Un tag "v1.2.3" déclenchera aussi le job release
-  pull_request:
+    tags:     [ "v*" ]      # tag v1.2.3 => release
   workflow_dispatch:
+
+concurrency:
+  group: publish-docs-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
     name: Build PDFs & PNGs
     runs-on: ubuntu-latest
 
-    # Image officielle avec Pandoc + TeX Live → évite d'installer TeX à chaque run
+    # Pandoc + LaTeX préinstallés
     container:
       image: pandoc/latex:latest
 
@@ -20,18 +23,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Python & pip
-        run: |
-          apt-get update
-          apt-get install -y python3 python3-pip
+      # Pas d'apt-get : on installe Python via l'action officielle
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-      - name: Install Python deps (requests)
+      - name: Install Python deps
         run: |
-          if [ -f scripts/requirements.txt ]; then
-            pip3 install -r scripts/requirements.txt
-          else
-            pip3 install requests
-          fi
+          pip install --upgrade pip
+          # ton script n'a besoin que de 'requests'
+          pip install requests
+
+      # (Optionnel) Mermaid CLI offline — évite Internet pour les PNG
+      # - name: Install Mermaid CLI (offline)
+      #   run: |
+      #     apt-get update && apt-get install -y npm chromium || true
+      #     npm i -g @mermaid-js/mermaid-cli || true
 
       - name: Build (PNG + PDF)
         run: |
@@ -56,6 +64,9 @@ jobs:
     needs: build
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
     steps:
       - name: Download PDFs
         uses: actions/download-artifact@v4
@@ -69,10 +80,9 @@ jobs:
           name: docs-png
           path: dist/png
 
-      - name: Package archives (en plus des PDFs individuels)
+      - name: Package archives
         run: |
           tar -czf docs-pdf.tar.gz -C dist/pdf .
-          # PNG facultatifs : si aucun png, ne pas faire échouer
           tar -czf diagrams-png.tar.gz -C dist/png . || true
 
       - name: Create/Update Release and upload assets
@@ -82,5 +92,3 @@ jobs:
             docs-pdf.tar.gz
             diagrams-png.tar.gz
             dist/pdf/*.pdf
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
