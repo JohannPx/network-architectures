@@ -1,0 +1,13 @@
+# Image de base Debian (bookworm) adaptée VS Code
+FROM mcr.microsoft.com/vscode/devcontainers/base:bookworm
+
+# Pandoc + TeX Live complet (fiable) + polices Noto + outils nécessaires
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pandoc \
+    texlive-full \
+    fonts-noto-core fonts-noto-extra fonts-noto-color-emoji fonts-noto-mono \
+    python3-pip python3-venv make git curl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+# Dossier de travail
+WORKDIR /workspaces/app

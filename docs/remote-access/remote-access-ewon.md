@@ -2,6 +2,14 @@
 
 ## Architecture
 
+<style>
+  .rightTitle .cluster-label {
+    text-anchor: end !important;
+    transform: translateX(35%) translateY(5px) !important;
+    font-weight: bold !important;
+  }
+</style>
+
 ```mermaid
 flowchart BT
 
@@ -14,7 +22,7 @@ flowchart BT
             gtc([💻 GTC])
         end
 
-        vlan@{ shape: das, label: "LAN autonome ou VLAN dédié" }
+        vlan(LAN autonome ou VLAN dédié)
         
         subgraph ewon [🖴 Ewon]
             ewonLan([🔌 LAN])
@@ -24,28 +32,14 @@ flowchart BT
 
     talk2m((☁️ Talk2M 🧱))
 
-    remote e2@== 🔒 VPN ==> talk2m
-    e2@{ animation: fast }
-
-    ewon e1@== 🔒 VPN ==> talk2m
-    e1@{ animation: fast }
-
-
+    remote == 🔒 VPN ==> talk2m
+    ewon == 🔒 VPN ==> talk2m
     automation === vlan
     vlan === ewon
+    
+    linkStyle 0 stroke:orange,stroke-width:3px,color:orange;
+    linkStyle 1 stroke:orange,stroke-width:3px,color:orange;
 ```
-
-### Légende
-- 💻 = PC distant (technicien)
-- ☁️ = Plateforme Cloud (Talk2M)
-- 🧱 = Fonction de sécurité (pare-feu applicatif, contrôle d’accès)
-- 🖴 = Ewon (avec séparation LAN/WAN)
-- 🔌 = Interfaces réseau (LAN/WAN)
-- 📡 = Modem 4G (option WAN)
-- 🖲️ = Zone Automatisme
-- 🎛️ = IHM
-- 📟 = API / Automate
-- 🔒 = VPN chiffré
 
 ## Description
 Cette architecture illustre l’accès distant sécurisé aux automates via un **Ewon Flexy**.  

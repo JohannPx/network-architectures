@@ -1,0 +1,86 @@
+name: Build & Publish Docs
+
+on:
+  push:
+    branches: [ "main" ]
+    tags:     [ "v*" ]     # Un tag "v1.2.3" déclenchera aussi le job release
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build PDFs & PNGs
+    runs-on: ubuntu-latest
+
+    # Image officielle avec Pandoc + TeX Live → évite d'installer TeX à chaque run
+    container:
+      image: pandoc/latex:latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Python & pip
+        run: |
+          apt-get update
+          apt-get install -y python3 python3-pip
+
+      - name: Install Python deps (requests)
+        run: |
+          if [ -f scripts/requirements.txt ]; then
+            pip3 install -r scripts/requirements.txt
+          else
+            pip3 install requests
+          fi
+
+      - name: Build (PNG + PDF)
+        run: |
+          python3 scripts/process.py --docs docs --out build
+
+      - name: Upload PDFs
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-pdf
+          path: build/pdf/*.pdf
+          if-no-files-found: error
+
+      - name: Upload PNGs
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-png
+          path: build/png/*.png
+          if-no-files-found: warn
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download PDFs
+        uses: actions/download-artifact@v4
+        with:
+          name: docs-pdf
+          path: dist/pdf
+
+      - name: Download PNGs
+        uses: actions/download-artifact@v4
+        with:
+          name: docs-png
+          path: dist/png
+
+      - name: Package archives (en plus des PDFs individuels)
+        run: |
+          tar -czf docs-pdf.tar.gz -C dist/pdf .
+          # PNG facultatifs : si aucun png, ne pas faire échouer
+          tar -czf diagrams-png.tar.gz -C dist/png . || true
+
+      - name: Create/Update Release and upload assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            docs-pdf.tar.gz
+            diagrams-png.tar.gz
+            dist/pdf/*.pdf
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
