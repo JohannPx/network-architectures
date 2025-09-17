@@ -41,18 +41,6 @@ flowchart BT
     linkStyle 1 stroke:orange,stroke-width:3px,color:orange;
 ```
 
-### Légende
-- 💻 = PC distant (technicien)
-- ☁️ = Plateforme Cloud (Talk2M)
-- 🧱 = Fonction de sécurité (pare-feu applicatif, contrôle d’accès)
-- 🖴 = Ewon (avec séparation LAN/WAN)
-- 🔌 = Interfaces réseau (LAN/WAN)
-- 📡 = Modem 4G (option WAN)
-- 🖲️ = Zone Automatisme
-- 🎛️ = IHM
-- 📟 = API / Automate
-- 🔒 = VPN chiffré
-
 ## Description
 Cette architecture illustre l’accès distant sécurisé aux automates via un **Ewon Flexy**.  
 - Le **PC distant** de l’intervenant établit un tunnel **VPN chiffré** vers la plateforme **Talk2M**.  
