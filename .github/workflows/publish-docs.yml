@@ -61,11 +61,10 @@ jobs:
           name: docs-png
           path: build/png/*.png
           if-no-files-found: warn
-
   release:
-    name: Publish GitHub Release
+    name: Publish GitHub Release (latest on main)
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -88,10 +87,16 @@ jobs:
           tar -czf docs-pdf.tar.gz -C dist/pdf .
           tar -czf diagrams-png.tar.gz -C dist/png . || true
 
-      - name: Create/Update Release and upload assets
+      - name: Create/Update rolling release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: latest
+          name: Latest docs (main)
+          prerelease: true
+          generate_release_notes: true
           files: |
             docs-pdf.tar.gz
             diagrams-png.tar.gz
             dist/pdf/*.pdf
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

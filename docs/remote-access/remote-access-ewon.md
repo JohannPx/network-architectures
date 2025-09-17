@@ -2,14 +2,6 @@
 
 ## Architecture
 
-<style>
-  .rightTitle .cluster-label {
-    text-anchor: end !important;
-    transform: translateX(35%) translateY(5px) !important;
-    font-weight: bold !important;
-  }
-</style>
-
 ```mermaid
 flowchart BT
 
