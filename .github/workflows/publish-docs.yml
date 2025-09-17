@@ -61,6 +61,7 @@ jobs:
           name: docs-png
           path: build/png/*.png
           if-no-files-found: warn
+  
   release:
     name: Publish GitHub Release (latest on main)
     needs: build
@@ -68,6 +69,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - name: Download PDFs
@@ -82,21 +87,53 @@ jobs:
           name: docs-png
           path: dist/png
 
-      - name: Package archives
+      # ✅ Génère une description lisible de la Release (voir §2)
+      - name: Build release body
         run: |
-          tar -czf docs-pdf.tar.gz -C dist/pdf .
-          tar -czf diagrams-png.tar.gz -C dist/png . || true
+          set -euo pipefail
+          {
+            echo "# Documentation – build sur main"
+            echo
+            echo "Cette Release *latest* contient les documents générés automatiquement à partir de \`docs/\` :"
+            echo
+            echo "## PDF disponibles"
+            if compgen -G "dist/pdf/*.pdf" > /dev/null; then
+              for f in dist/pdf/*.pdf; do
+                bn=$(basename "$f")
+                echo "- $bn"
+              done
+            else
+              echo "_Aucun PDF généré._"
+            fi
+            echo
+            echo "## PNG disponibles (diagrammes)"
+            if compgen -G "dist/png/*.png" > /dev/null; then
+              for f in dist/png/*.png; do
+                bn=$(basename "$f")
+                echo "- $bn"
+              done
+            else
+              echo "_Aucun PNG généré._"
+            fi
+            echo
+            echo "## Utilisation"
+            echo "- Téléchargez directement les **PDF individuels** pour diffusion."
+            echo "- Les **PNG** sont attachés individuellement (pas besoin de dézipper)."
+            echo
+            echo "> Astuce : pour une version figée, publiez un tag \`vX.Y.Z\` — la Release correspondante sera créée avec les mêmes assets."
+          } > release-body.md
 
-      - name: Create/Update rolling release
+      # ✅ Crée / met à jour la Release "latest" avec PDF + PNG individuels
+      - name: Create/Update rolling release (latest)
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
           name: Latest docs (main)
           prerelease: true
           generate_release_notes: true
+          body_path: release-body.md
           files: |
-            docs-pdf.tar.gz
-            diagrams-png.tar.gz
             dist/pdf/*.pdf
+            dist/png/*.png
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
