@@ -1,280 +1,86 @@
-name: Build & Release Documentation
+name: Build & Publish Docs
 
 on:
   push:
-    branches:
-      - main
-      - draft
-
-permissions:
-  contents: write
+    branches: [ "main" ]
+    tags:     [ "v*" ]     # Un tag "v1.2.3" déclenchera aussi le job release
+  pull_request:
+  workflow_dispatch:
 
 jobs:
-  build-release:
+  build:
+    name: Build PDFs & PNGs
     runs-on: ubuntu-latest
+
+    # Image officielle avec Pandoc + TeX Live → évite d'installer TeX à chaque run
+    container:
+      image: pandoc/latex:latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Install Python & pip
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            pandoc \
-            texlive-xetex \
-            texlive-latex-extra \
-            fonts-noto \
-            fonts-noto-color-emoji \
-            python3-pip
-          
-          pip3 install requests
+          apt-get update
+          apt-get install -y python3 python3-pip
 
-      - name: Process Markdown and Generate PDFs with diagrams
+      - name: Install Python deps (requests)
         run: |
-          mkdir -p build/pdf
-          mkdir -p build/png
-          mkdir -p build/temp
-          
-          # Script Python qui convertit Mermaid en PNG avec support emojis
-          cat > process.py << 'PYTHON'
-          import re
-          import pathlib
-          import subprocess
-          import requests
-          import base64
-          import urllib.parse
-          
-          def clean_mermaid_syntax(code):
-              """Nettoie la syntaxe Mermaid non standard MAIS garde les emojis"""
-              # Remplacer @{ shape: das, label: "..." } par ["..."]
-              code = re.sub(r'(\w+)@\{\s*shape:\s*das,\s*label:\s*"([^"]+)"\s*\}', r'\1["\2"]', code)
-              # Supprimer les animations
-              code = re.sub(r'\w+@\{\s*animation:\s*\w+\s*\}', '', code)
-              code = re.sub(r'(\w+)\s+e\d+@', r'\1 ', code)
-              return code
-          
-          def mermaid_to_png_with_emojis(mermaid_code, output_path):
-              """Convertit Mermaid en PNG via mermaid.ink (supporte les emojis)"""
-              try:
-                  # Nettoyer le code MAIS garder les emojis
-                  cleaned = clean_mermaid_syntax(mermaid_code)
-                  
-                  # Encoder pour mermaid.ink
-                  encoded = base64.b64encode(cleaned.encode('utf-8')).decode('ascii')
-                  
-                  # Utiliser mermaid.ink qui supporte les emojis
-                  url = f"https://mermaid.ink/img/{encoded}?type=png"
-                  
-                  # Headers pour éviter le blocage
-                  headers = {
-                      'User-Agent': 'Mozilla/5.0 (compatible; GitHub-Actions)',
-                      'Accept': 'image/png'
-                  }
-                  
-                  response = requests.get(url, headers=headers, timeout=30)
-                  
-                  if response.status_code == 200:
-                      output_path.parent.mkdir(parents=True, exist_ok=True)
-                      output_path.write_bytes(response.content)
-                      print(f"    ✓ PNG avec emojis: {output_path.name}")
-                      return True
-                  else:
-                      print(f"    ✗ Erreur mermaid.ink: {response.status_code}")
-                      # Fallback sur Kroki sans emojis
-                      return mermaid_to_png_kroki_fallback(cleaned, output_path)
-              except Exception as e:
-                  print(f"    ✗ Erreur: {str(e)[:100]}")
-                  # Fallback sur Kroki
-                  return mermaid_to_png_kroki_fallback(cleaned, output_path)
-          
-          def mermaid_to_png_kroki_fallback(mermaid_code, output_path):
-              """Fallback sur Kroki si mermaid.ink échoue"""
-              try:
-                  import zlib
-                  compressed = zlib.compress(mermaid_code.encode('utf-8'), 9)
-                  encoded = base64.urlsafe_b64encode(compressed).decode('ascii')
-                  url = f"https://kroki.io/mermaid/png/{encoded}"
-                  response = requests.get(url, timeout=30)
-                  
-                  if response.status_code == 200:
-                      output_path.write_bytes(response.content)
-                      print(f"    ✓ PNG (sans emojis via Kroki): {output_path.name}")
-                      return True
-              except:
-                  pass
-              return False
-          
-          def process_markdown_file(md_path):
-              """Traite un fichier Markdown"""
-              print(f"\n📄 Processing: {md_path}")
-              
-              content = md_path.read_text(encoding='utf-8')
-              
-              # Pattern pour les blocs mermaid
-              pattern = re.compile(r'^```mermaid\s*\n(.*?)\n```', re.MULTILINE | re.DOTALL)
-              matches = pattern.findall(content)
-              print(f"  Found {len(matches)} mermaid blocks")
-              
-              # Remplacer chaque bloc mermaid par une image
-              counter = 0
-              def replace_mermaid(match):
-                  nonlocal counter
-                  code = match.group(1)
-                  
-                  # Générer nom unique pour le PNG
-                  stem = str(md_path.relative_to(pathlib.Path('docs'))).replace('/', '_').replace('.md', '')
-                  png_name = f"{stem}_{counter}.png"
-                  png_path = pathlib.Path(f"build/png/{png_name}")
-                  
-                  # Convertir en PNG avec emojis
-                  if mermaid_to_png_with_emojis(code, png_path):
-                      counter += 1
-                      # Retourner l'image pour le MD
-                      return f"\n![Diagram]({png_path.absolute()})\n"
-                  else:
-                      # Si échec total, garder le code
-                      return match.group(0)
-              
-              # Remplacer tous les blocs
-              processed_content = pattern.sub(replace_mermaid, content)
-              
-              # Sauvegarder le MD traité
-              temp_md = pathlib.Path(f"build/temp/{md_path.name}")
-              temp_md.parent.mkdir(parents=True, exist_ok=True)
-              temp_md.write_text(processed_content, encoding='utf-8')
-              
-              # Générer le PDF avec les images intégrées
-              pdf_name = str(md_path.relative_to(pathlib.Path('docs'))).replace('/', '_').replace('.md', '.pdf')
-              pdf_path = pathlib.Path(f"build/pdf/{pdf_name}")
-              
-              # Ne pas générer de PDF pour les fichiers vides ou très courts
-              if len(processed_content.strip()) < 10:
-                  print(f"  → Fichier trop court, pas de PDF généré")
-                  return
-              
-              # Convertir en PDF avec XeLaTeX pour les emojis du texte
-              cmd = [
-                  'pandoc', str(temp_md),
-                  '-o', str(pdf_path),
-                  '--pdf-engine=xelatex',
-                  '--variable', 'geometry:margin=1in',
-                  '--variable', 'fontsize=11pt',
-                  '--variable', 'mainfont=Noto Sans',
-                  '--variable', 'colorlinks=true',
-                  '--resource-path=build/png'
-              ]
-              
-              result = subprocess.run(cmd, capture_output=True, text=True)
-              
-              if pdf_path.exists():
-                  print(f"  ✓ PDF avec emojis: {pdf_name}")
-              else:
-                  # Essayer avec pdflatex
-                  cmd[3] = '--pdf-engine=pdflatex'
-                  subprocess.run(cmd, capture_output=True)
-                  if pdf_path.exists():
-                      print(f"  ✓ PDF (pdflatex): {pdf_name}")
-                  else:
-                      print(f"  ✗ PDF failed")
-          
-          # Traiter tous les fichiers MD sous docs/
-          docs_dir = pathlib.Path('docs')
-          if docs_dir.exists():
-              md_files = list(docs_dir.rglob('*.md'))
-              print(f"🔍 Found {len(md_files)} markdown files\n")
-              
-              for md_file in md_files:
-                  process_markdown_file(md_file)
-              
-              # Stats
-              png_count = len(list(pathlib.Path('build/png').glob('*.png')))
-              pdf_count = len(list(pathlib.Path('build/pdf').glob('*.pdf')))
-              print(f"\n✅ Results: {png_count} PNGs avec emojis, {pdf_count} PDFs")
-          else:
-              print("ERROR: docs/ directory not found")
-          PYTHON
-          
-          python3 process.py
-
-      - name: Verify outputs
-        run: |
-          echo "=== PNG files generated ==="
-          ls -la build/png/ 2>/dev/null || echo "No PNGs"
-          echo ""
-          echo "=== PDF files generated ==="
-          ls -la build/pdf/ 2>/dev/null || echo "No PDFs"
-
-      - name: Create ZIP archives
-        run: |
-          cd build
-          
-          # ZIP des PDFs
-          if [ -d "pdf" ] && [ "$(ls -A pdf 2>/dev/null)" ]; then
-            zip -r PDFs.zip pdf/
-            echo "✓ Created PDFs.zip"
+          if [ -f scripts/requirements.txt ]; then
+            pip3 install -r scripts/requirements.txt
           else
-            mkdir -p pdf
-            echo "No PDFs generated" > pdf/README.txt
-            zip -r PDFs.zip pdf/
+            pip3 install requests
           fi
-          
-          # ZIP des PNGs
-          if [ -d "png" ] && [ "$(ls -A png 2>/dev/null)" ]; then
-            zip -r PNGs.zip png/
-            echo "✓ Created PNGs.zip"
-          else
-            mkdir -p png
-            echo "No PNGs generated" > png/README.txt
-            zip -r PNGs.zip png/
-          fi
-          
-          cd ..
 
-      - name: Upload artifacts
+      - name: Build (PNG + PDF)
+        run: |
+          python3 scripts/process.py --docs docs --out build
+
+      - name: Upload PDFs
         uses: actions/upload-artifact@v4
         with:
-          name: documentation-outputs
-          path: |
-            build/pdf/
-            build/png/
-          retention-days: 30
+          name: docs-pdf
+          path: build/pdf/*.pdf
+          if-no-files-found: error
 
-      - name: Get date
-        id: date
-        run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+      - name: Upload PNGs
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-png
+          path: build/png/*.png
+          if-no-files-found: warn
 
-      - name: Create Release
+  release:
+    name: Publish GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download PDFs
+        uses: actions/download-artifact@v4
+        with:
+          name: docs-pdf
+          path: dist/pdf
+
+      - name: Download PNGs
+        uses: actions/download-artifact@v4
+        with:
+          name: docs-png
+          path: dist/png
+
+      - name: Package archives (en plus des PDFs individuels)
+        run: |
+          tar -czf docs-pdf.tar.gz -C dist/pdf .
+          # PNG facultatifs : si aucun png, ne pas faire échouer
+          tar -czf diagrams-png.tar.gz -C dist/png . || true
+
+      - name: Create/Update Release and upload assets
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ github.run_number }}
-          name: "Documentation Build #${{ github.run_number }} - ${{ steps.date.outputs.date }}"
-          draft: false
-          prerelease: ${{ github.ref != 'refs/heads/main' }}
-          body: |
-            ## 📚 Documentation Release
-            
-            **Date:** ${{ steps.date.outputs.date }}  
-            **Branch:** ${{ github.ref_name }}  
-            **Build:** #${{ github.run_number }}
-            
-            ### 📦 Assets
-            
-            - **PDFs.zip** - Documents PDF avec diagrammes et emojis intégrés
-            - **PNGs.zip** - Tous les diagrammes Mermaid en PNG
-            
-            ### ✨ Contenu
-            
-            Les PDFs contiennent :
-            - Les diagrammes Mermaid convertis en images
-            - Support complet des emojis
-            - Mise en page professionnelle
-            
-            Les PNGs contiennent :
-            - Tous les diagrammes extraits des fichiers Markdown
-            - Prêts pour réutilisation
           files: |
-            build/PDFs.zip
-            build/PNGs.zip
+            docs-pdf.tar.gz
+            diagrams-png.tar.gz
+            dist/pdf/*.pdf
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
