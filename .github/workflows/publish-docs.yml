@@ -3,7 +3,7 @@ name: Build & Publish Docs
 on:
   push:
     branches: [ "main" ]
-    tags:     [ "v*" ]      # tag v1.2.3 => release
+    tags:     [ "v*" ]           # tag v1.2.3 => release
   workflow_dispatch:
 
 concurrency:
@@ -15,43 +15,38 @@ jobs:
     name: Build PDFs & PNGs
     runs-on: ubuntu-latest
 
-    # Pandoc + LaTeX préinstallés
-    container:
-      image: pandoc/latex:latest
-
-    # IMPORTANT: utiliser sh (pas bash) dans ce conteneur
-    defaults:
-      run:
-        shell: sh
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Installe Python DANS le conteneur
+      # Pandoc + TeX Live pour LuaLaTeX
+      - name: Install Pandoc & TeX Live
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pandoc \
+            texlive-luatex texlive-latex-recommended texlive-latex-extra \
+            texlive-fonts-recommended texlive-fonts-extra \
+            texlive-plain-generic lmodern
+
+      # Python pour exécuter scripts/process.py
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Verify Python in PATH
-        run: |
-          command -v python || true
-          command -v python3 || true
-          (python --version || python3 --version) || true
-
       - name: Install Python deps
         run: |
-          (python -m pip install --upgrade pip || python3 -m pip install --upgrade pip)
+          python -m pip install --upgrade pip
           if [ -f scripts/requirements.txt ]; then
-            (python -m pip install -r scripts/requirements.txt || python3 -m pip install -r scripts/requirements.txt)
+            python -m pip install -r scripts/requirements.txt
           else
-            (python -m pip install requests || python3 -m pip install requests)
+            python -m pip install requests
           fi
 
       - name: Build (PNG + PDF)
         run: |
-          (python scripts/process.py --docs docs --out build || python3 scripts/process.py --docs docs --out build)
+          python scripts/process.py --docs docs --out build
 
       - name: Upload PDFs
         uses: actions/upload-artifact@v4
@@ -74,10 +69,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-
-    defaults:
-      run:
-        shell: sh
 
     steps:
       - name: Download PDFs
