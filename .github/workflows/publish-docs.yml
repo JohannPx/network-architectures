@@ -15,35 +15,42 @@ jobs:
     name: Build PDFs & PNGs
     runs-on: ubuntu-latest
 
-    # Pandoc + LaTeX préinstallés
+    # Image avec Pandoc + TeX déjà installés
     container:
       image: pandoc/latex:latest
+
+    # Assure un shell bash partout
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Pas d'apt-get : on installe Python via l'action officielle
+      # IMPORTANT: installe Python *dans le contexte du job conteneurisé*
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
+      - name: Verify Python in PATH
+        run: |
+          which python || true
+          python --version
+
       - name: Install Python deps
         run: |
-          pip install --upgrade pip
-          # ton script n'a besoin que de 'requests'
-          pip install requests
-
-      # (Optionnel) Mermaid CLI offline — évite Internet pour les PNG
-      # - name: Install Mermaid CLI (offline)
-      #   run: |
-      #     apt-get update && apt-get install -y npm chromium || true
-      #     npm i -g @mermaid-js/mermaid-cli || true
+          python -m pip install --upgrade pip
+          if [ -f scripts/requirements.txt ]; then
+            python -m pip install -r scripts/requirements.txt
+          else
+            python -m pip install requests
+          fi
 
       - name: Build (PNG + PDF)
         run: |
-          python3 scripts/process.py --docs docs --out build
+          python scripts/process.py --docs docs --out build
 
       - name: Upload PDFs
         uses: actions/upload-artifact@v4
@@ -66,6 +73,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - name: Download PDFs
