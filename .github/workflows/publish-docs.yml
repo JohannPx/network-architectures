@@ -87,7 +87,28 @@ jobs:
           name: docs-png
           path: dist/png
 
-      # ✅ Génère une description lisible de la Release (voir §2)
+      # Supprimer proprement l’ancienne release/tag 'latest' avant recréation
+      - name: Remove previous 'latest' release & tag (idempotent)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # Supprimer la release 'latest' si elle existe
+          if gh release view latest >/dev/null 2>&1; then
+            echo "Deleting existing release 'latest'…"
+            gh release delete latest -y
+          else
+            echo "No existing 'latest' release."
+          fi
+          # Supprimer la ref du tag 'latest' côté serveur (si elle existe)
+          gh api \
+            --method DELETE \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${REPO}/git/refs/tags/latest" \
+            >/dev/null 2>&1 || echo "Tag ref 'latest' not found (ok)."
+
+      # ✅ Génère une description lisible de la Release
       - name: Build release body
         run: |
           set -euo pipefail
@@ -120,11 +141,11 @@ jobs:
             echo "- Téléchargez directement les **PDF individuels** pour diffusion."
             echo "- Les **PNG** sont attachés individuellement (pas besoin de dézipper)."
             echo
-            echo "> Astuce : pour une version figée, publiez un tag \`vX.Y.Z\` — la Release correspondante sera créée avec les mêmes assets."
+            echo "> Astuce : pour une version figée, publiez un tag \`vX.Y.Z\` — une Release correspondante sera créée avec les mêmes assets."
           } > release-body.md
 
-      # ✅ Crée / met à jour la Release "latest" avec PDF + PNG individuels
-      - name: Create/Update rolling release (latest)
+      # ✅ Crée la nouvelle Release 'latest' + upload des assets individuels
+      - name: Create rolling release (latest) with assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest

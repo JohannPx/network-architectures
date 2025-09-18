@@ -3,13 +3,13 @@
 ## Architecture
 
 ```mermaid
-flowchart TB
+flowchart LR
 
     remote([💻 PC distant])
 
     internet((🌐 Internet))
 
-    subgraph site [🏭 Site client]
+    subgraph site [🏭 Site industriel]
         fw(🛡️ Pare-feu 🧱)
         vlan(Zone de rebond)
         jumpServer([🖥️ Poste

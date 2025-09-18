@@ -7,7 +7,7 @@ flowchart BT
 
     remote([💻 PC distant])
 
-    subgraph site [🏭 Site client]
+    subgraph site [🏭 Site industriel]
         subgraph automation [🖲️ Automatisme]
             plc([📟 API])
             hmi([🎛️ IHM])
@@ -25,9 +25,9 @@ flowchart BT
     talk2m((☁️ Talk2M 🧱))
 
     remote == 🔒 VPN ==> talk2m
-    ewon == 🔒 VPN ==> talk2m
+    ewonWan == 🔒 VPN ==> talk2m
     automation === vlan
-    vlan === ewon
+    vlan === ewonLan
     
     linkStyle 0 stroke:orange,stroke-width:3px,color:orange;
     linkStyle 1 stroke:orange,stroke-width:3px,color:orange;
