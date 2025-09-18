@@ -18,18 +18,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # (1) Install Pandoc + LaTeX
-      - name: Install system deps (Pandoc + LaTeX)
+      # 1) Dépendances système (Pandoc + LuaLaTeX + polices Noto + LM)
+      - name: Install system deps (Pandoc + LuaLaTeX + Fonts)
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
           sudo apt-get update
-          sudo apt-get install -y pandoc \
+          sudo apt-get install -y \
+            pandoc \
+            texlive-luatex \
             texlive-latex-recommended \
             texlive-latex-extra \
             texlive-fonts-recommended \
             texlive-fonts-extra \
-            lmodern
+            lmodern \
+            fonts-noto-core \
+            fonts-noto-mono
+          # Vérifications (fail fast si manquants)
+          pandoc -v | head -n 2
+          luaotfload-tool -u        # prépare l’index des polices pour LuaLaTeX
+          lualatex --version | head -n 1
 
-      # (2) Setup Python pour exécuter ton process.py
+      # 2) Python pour process.py
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -39,14 +49,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r scripts/requirements.txt
 
-      # (3) Build
+      # 3) Build
       - name: Build PDFs & PNGs
         run: |
           python scripts/process.py --docs docs --out build
-          ls -al build/pdf
-          ls -al build/png
+          echo "== PDFs ==" && ls -al build/pdf || true
+          echo "== PNGs ==" && ls -al build/png || true
+          echo "== Legal docs (optionnels) ==" && ls -al docs/legal || true
 
-      # (4) Release
+      # 4) Release (mise à jour de la release 'latest', remplacement des assets)
       - name: Publish release with assets (PDF + PNG + legal docs)
         uses: ncipollo/release-action@v1
         with:
