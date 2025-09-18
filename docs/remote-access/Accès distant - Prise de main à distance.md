@@ -1,4 +1,4 @@
-# Accès distant - Logiciel prise de main à distance (PMAD)
+# Accès distant - Logiciel de Prise de Main À Distance (PMAD)
 
 ## Architecture
 
