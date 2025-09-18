@@ -12,7 +12,7 @@ flowchart LR
     ...))
 
     subgraph site [🏭 Site industriel]
-        fw(🛡️ Pare-feu 🧱)
+        fw[🛡️ Pare-feu 🧱]
         jumpAera(Zone de rebond)
         vlanAutomation(VLAN dédié)
         jumpServer([🖥️ Poste de rebond

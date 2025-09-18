@@ -13,7 +13,7 @@ flowchart BT
         vlan(VLAN dédié)
         
         subgraph mcd [🖴 MCD]
-            mcdLan([🔌 LAN])
+            mcdLan[🔌 LAN]
         end
     end
 
@@ -37,8 +37,8 @@ flowchart BT
 
     subgraph site [🏭 Site client]
         subgraph mcd [🖴 MCD]
-            mcdLan([🔌 LAN])
-            mcdWan([🔌 WAN ou 📡 MODEM])
+            mcdLan[🔌 LAN]
+            mcdWan[🔌 WAN ou 📡 MODEM]
         end
         vlan(VLAN dédié)
         subgraph automation [🖲️ Automatisme]

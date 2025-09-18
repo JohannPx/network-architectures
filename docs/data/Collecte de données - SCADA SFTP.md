@@ -17,7 +17,7 @@ flowchart BT
         vlanPlc(VLAN automatisme)
         
         subgraph scada [💻 SCADA]
-            scadaLan([🔌 LAN])
+            scadaLan[🔌 LAN]
         end
     end
 
