@@ -13,7 +13,7 @@ flowchart BT
         vlan(VLAN dédié)
         
         subgraph ewon [🖴 Datalogger]
-            ewonLan([🔌 LAN])
+            ewonLan[🔌 LAN]
         end
     end
 
@@ -40,8 +40,8 @@ flowchart BT
         vlan(LAN autonome ou VLAN dédié)
         
         subgraph ewon [🖴 Datalogger]
-            ewonLan([🔌 LAN])
-            ewonWan([🔌 WAN ou 📡 MODEM])
+            ewonLan[🔌 LAN]
+            ewonWan[🔌 WAN ou 📡 MODEM]
         end
     end
 

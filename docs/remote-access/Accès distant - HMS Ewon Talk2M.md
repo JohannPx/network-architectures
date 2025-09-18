@@ -17,8 +17,8 @@ flowchart BT
         vlan(LAN autonome ou VLAN dédié)
         
         subgraph ewon [🖴 Ewon]
-            ewonLan([🔌 LAN])
-            ewonWan([🔌 WAN ou 📡 MODEM])
+            ewonLan[🔌 LAN]
+            ewonWan[🔌 WAN ou 📡 MODEM]
         end
     end
 

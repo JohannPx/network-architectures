@@ -1,4 +1,4 @@
-# Collecte de données - Echange par SFTP
+# Collecte de données - Echange de fichiers par SFTP
 
 ## Architecture
 

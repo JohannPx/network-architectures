@@ -10,7 +10,7 @@ flowchart LR
     internet((🌐 Internet))
 
     subgraph site [🏭 Site industriel]
-        fw(🛡️ Pare-feu 🧱)
+        fw[🛡️ Pare-feu 🧱]
         vlan(Zone de rebond)
         jumpServer([🖥️ Poste
         de rebond])
