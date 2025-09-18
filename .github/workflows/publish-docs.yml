@@ -56,20 +56,32 @@ jobs:
           echo "== PDFs ==" && ls -al build/pdf || true
           echo "== PNGs ==" && ls -al build/png || true
           echo "== Legal docs (optionnels) ==" && ls -al docs/legal || true
-
-      # 4) Release (mise à jour de la release 'latest', remplacement des assets)
+          
+      # 4) Release (mise à jour 'latest', remplace les assets + description lisible)
       - name: Publish release with assets (PDF + PNG + legal docs)
         uses: ncipollo/release-action@v1
         with:
           tag: latest
           name: Latest docs (main)
           allowUpdates: true
+          replacesArtifacts: true         # <-- remplace les assets du même nom
           generateReleaseNotes: false
           draft: false
           prerelease: false
+          body: |
+            ## Network Architectures — export PDF & PNG
+
+            Cette release fournit les documents prêts à partager :
+            - **PDF** : rendus complets des architectures (sans numéros de page)
+            - **PNG** : diagrammes Mermaid rasterisés
+            - **Légaux** (si présents) : formulaires client (GRDF/Enedis)
+
+            > Astuce : cliquez sur chaque fichier dans "Assets" pour le télécharger individuellement.
+
+            _Tag_: `latest` — mis à jour automatiquement à chaque push sur `main`.
           artifacts: |
-            build/pdf/*.pdf,
-            build/png/*.png,
-            docs/legal/*.pdf,
-            docs/legal/*.doc,
+            build/pdf/*.pdf
+            build/png/*.png
+            docs/legal/*.pdf
+            docs/legal/*.doc
             docs/legal/*.docx
