@@ -5,7 +5,8 @@
 ```mermaid
 flowchart LR
 
-    customer([🌐 Client ou serveur SFTP]) <== 🔒 SFTP ==> myportal3e([☁️ MyPortal3E])
+    customer((🌐 Client ou
+    serveur SFTP)) <== 🔒 SFTP ==> myportal3e((☁️ MyPortal3E))
 
 ```
 

@@ -5,8 +5,8 @@
 ```mermaid
 flowchart LR
 
-    enedis([🌐 ENEDIS SGE]) == 🔒 SFTP ==> datalink((☁️ Datalink))
-    datalink((☁️ Datalink)) == 🔒 HTTPS ==> myportal3e([☁️ MyPortal3E])
+    enedis((🌐 ENEDIS SGE)) == 🔒 SFTP ==> datalink((☁️ Datalink))
+    datalink((☁️ Datalink)) == 🔒 HTTPS ==> myportal3e((☁️ MyPortal3E))
 
 ```
 

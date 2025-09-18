@@ -3,7 +3,7 @@
 ## Architecture
 
 ```mermaid
-flowchart BT
+flowchart LR
 
     remote([💻 PC distant])
 
@@ -11,7 +11,7 @@ flowchart BT
     TeamViewer,
     ...))
 
-    subgraph site [🏭 Site client]
+    subgraph site [🏭 Site industriel]
         fw(🛡️ Pare-feu 🧱)
         jumpAera(Zone de rebond)
         vlanAutomation(VLAN dédié)

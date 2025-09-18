@@ -32,7 +32,7 @@ flowchart BT
 ```mermaid
 flowchart BT
 
-    subgraph site [🏭 Site client]
+    subgraph site [🏭 Site industriel]
         subgraph automation [🖲️ Automatisme]
             plc([📟 API])
         end
