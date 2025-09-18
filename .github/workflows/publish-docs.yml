@@ -135,5 +135,7 @@ jobs:
           files: |
             dist/pdf/*.pdf
             dist/png/*.png
+            docs/legal/*.pdf
+            docs/legal/*.docx
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
