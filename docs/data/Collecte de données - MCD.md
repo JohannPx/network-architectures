@@ -24,7 +24,8 @@ flowchart BT
     vlan === mcd
     
     linkStyle 0 stroke:orange,stroke-width:3px,color:orange;
-    linkStyle 2 stroke:orange,stroke-width:3px,color:orange;
+    linkStyle 1 stroke:orange,stroke-width:3px,color:orange;
+    linkStyle 3 stroke:orange,stroke-width:3px,color:orange;
 ```
 
 ## Architecture - 2 segments réseau
