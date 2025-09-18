@@ -18,28 +18,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # (1) Setup Python pour exécuter ton process.py
+      # (1) Install Pandoc + LaTeX
+      - name: Install system deps (Pandoc + LaTeX)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pandoc \
+            texlive-latex-recommended \
+            texlive-latex-extra \
+            texlive-fonts-recommended \
+            texlive-fonts-extra \
+            lmodern
+
+      # (2) Setup Python pour exécuter ton process.py
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install deps
+      - name: Install Python deps
         run: |
           python -m pip install --upgrade pip
           pip install -r scripts/requirements.txt
 
-      # (2) Build
+      # (3) Build
       - name: Build PDFs & PNGs
         run: |
           python scripts/process.py --docs docs --out build
-          echo "== PDFs générés ==" && ls -al build/pdf || true
-          echo "== PNGs générés ==" && ls -al build/png || true
-          echo "== Docs légaux (si présents) =="
-          ls -al docs/legal       || true
-          ls -al docs/juridique   || true
+          ls -al build/pdf
+          ls -al build/png
 
-      # (3) Créer/mettre à jour LA release "Latest docs"
-      - name: Publish release with assets (PDF + PNG + Légaux)
+      # (4) Release
+      - name: Publish release with assets (PDF + PNG + legal docs)
         uses: ncipollo/release-action@v1
         with:
           tag: latest
@@ -52,4 +60,5 @@ jobs:
             build/pdf/*.pdf,
             build/png/*.png,
             docs/legal/*.pdf,
+            docs/legal/*.doc,
             docs/legal/*.docx
