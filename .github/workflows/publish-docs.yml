@@ -1,143 +1,141 @@
-name: Publication des documents
+name: Build & Publish Docs
 
 on:
   push:
-    branches: [ main ]
-    paths:
-      - 'docs/**'
-      - 'scripts/**'
-      - '.github/workflows/**'
+    branches: [ "main" ]
+    tags:     [ "v*" ]           # tag v1.2.3 => release
   workflow_dispatch:
 
-permissions:
-  contents: write
+concurrency:
+  group: publish-docs-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  build-et-release:
+  build:
+    name: Build PDFs & PNGs
     runs-on: ubuntu-latest
 
     steps:
-      - name: Récupération du dépôt
+      - name: Checkout
         uses: actions/checkout@v4
 
-      # 1) Dépendances système : Pandoc + LuaLaTeX + polices Noto/LM
-      - name: Installer Pandoc, LaTeX et polices
-        env:
-          DEBIAN_FRONTEND: noninteractive
+      # Pandoc + TeX Live pour LuaLaTeX
+      - name: Install Pandoc & TeX Live
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             pandoc \
-            texlive-luatex \
-            texlive-latex-recommended \
-            texlive-latex-extra \
-            texlive-fonts-recommended \
-            texlive-fonts-extra \
-            lmodern \
-            fonts-noto-core \
-            fonts-noto-mono
-          pandoc -v | head -n 2
-          luaotfload-tool -u
-          lualatex --version | head -n 1
+            texlive-luatex texlive-latex-recommended texlive-latex-extra \
+            texlive-fonts-recommended texlive-fonts-extra \
+            texlive-plain-generic lmodern
 
-      # 2) Environnement Python pour exécuter scripts/process.py
-      - name: Installer Python
+      # Python pour exécuter scripts/process.py
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
-      - name: Installer dépendances Python
+      - name: Install Python deps
         run: |
           python -m pip install --upgrade pip
-          pip install -r scripts/requirements.txt
+          if [ -f scripts/requirements.txt ]; then
+            python -m pip install -r scripts/requirements.txt
+          else
+            python -m pip install requests
+          fi
 
-      # 3) Build local (PDF + PNG)
-      - name: Générer les PDFs et PNGs
+      - name: Build (PNG + PDF)
         run: |
           python scripts/process.py --docs docs --out build
-          echo "::group::PDF générés"
-          ls -al build/pdf || true
-          echo "::endgroup::"
-          echo "::group::PNG générés"
-          ls -al build/png || true
-          echo "::endgroup::"
 
-      # 4) Préparer la liste d’assets et les notes de release
-      - name: Collecter les assets et composer la description
-        id: collate
+      - name: Upload PDFs
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-pdf
+          path: build/pdf/*.pdf
+          if-no-files-found: error
+
+      - name: Upload PNGs
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-png
+          path: build/png/*.png
+          if-no-files-found: warn
+  
+  release:
+    name: Publish GitHub Release (latest on main)
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    defaults:
+      run:
         shell: bash
+
+    steps:
+      - name: Download PDFs
+        uses: actions/download-artifact@v4
+        with:
+          name: docs-pdf
+          path: dist/pdf
+
+      - name: Download PNGs
+        uses: actions/download-artifact@v4
+        with:
+          name: docs-png
+          path: dist/png
+
+      # ✅ Génère une description lisible de la Release (voir §2)
+      - name: Build release body
         run: |
           set -euo pipefail
-          shopt -s nullglob
-
-          PDF_DIR="build/pdf"
-          PNG_DIR="build/png"
-          LEGAL_DIR="docs/legal"
-
-          files=()
-          for f in "$PDF_DIR"/*.pdf; do files+=("$f"); done
-          for f in "$PNG_DIR"/*.png; do files+=("$f"); done
-          for f in "$LEGAL_DIR"/*.pdf "$LEGAL_DIR"/*.doc" "$LEGAL_DIR"/*.docx; do files+=("$f"); done
-
-          printf "%s\n" "${files[@]}" > assets.txt
-          echo "files_count=${#files[@]}" >> "$GITHUB_OUTPUT"
-
           {
-            echo "## Network Architectures — export PDF & PNG"
+            echo "# Documentation – build sur main"
             echo
-            echo "Cette release met à disposition la **dernière version** des documents générés à partir des fichiers Markdown + Mermaid."
+            echo "Cette Release *latest* contient les documents générés automatiquement à partir de \`docs/\` :"
             echo
-            echo "### Contenu"
-            echo "- **PDF** : rendus complets des documents"
-            echo "- **PNG** : diagrammes Mermaid rasterisés"
-            echo "- **Légaux** : modèles nécessaires (s’ils sont présents) pour GRDF/Enedis"
-            echo
-            if (( ${#files[@]} > 0 )); then
-              echo "### Fichiers publiés"
-              for f in "${files[@]}"; do
-                echo "- $(basename "$f")"
+            echo "## PDF disponibles"
+            if compgen -G "dist/pdf/*.pdf" > /dev/null; then
+              for f in dist/pdf/*.pdf; do
+                bn=$(basename "$f")
+                echo "- $bn"
               done
-              echo
+            else
+              echo "_Aucun PDF généré._"
             fi
-            echo "_Release mise à jour automatiquement à chaque push sur \`main\` (tag \`latest\`)._"
-          } > RELEASE_NOTES.md
+            echo
+            echo "## PNG disponibles (diagrammes)"
+            if compgen -G "dist/png/*.png" > /dev/null; then
+              for f in dist/png/*.png; do
+                bn=$(basename "$f")
+                echo "- $bn"
+              done
+            else
+              echo "_Aucun PNG généré._"
+            fi
+            echo
+            echo "## Utilisation"
+            echo "- Téléchargez directement les **PDF individuels** pour diffusion."
+            echo "- Les **PNG** sont attachés individuellement (pas besoin de dézipper)."
+            echo
+            echo "> Astuce : pour une version figée, publiez un tag \`vX.Y.Z\` — la Release correspondante sera créée avec les mêmes assets."
+          } > release-body.md
 
-      # 5) Authentifier la CLI GitHub
-      - name: Authentification gh
+      # ✅ Crée / met à jour la Release "latest" avec PDF + PNG individuels
+      - name: Create/Update rolling release (latest)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest docs (main)
+          prerelease: false
+          generate_release_notes: true
+          body_path: release-body.md
+          files: |
+            dist/pdf/*.pdf
+            dist/png/*.png
+            docs/legal/*.pdf
+            docs/legal/*.docx
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh auth status
-
-      # 6) Supprimer l’ancienne release/tag 'latest' pour repartir propre
-      - name: Supprimer ancienne release et tag 'latest' (si présents)
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          gh release view latest >/dev/null 2>&1 && gh release delete latest -y || true
-          git tag -l | grep -q '^latest$' && git push origin :refs/tags/latest || true
-
-      # 7) Créer la release et téléverser les assets
-      - name: Créer la release et téléverser les fichiers
-        if: steps.collate.outputs.files_count != '0'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          gh release create latest \
-            --title "Latest docs (main)" \
-            --notes-file RELEASE_NOTES.md
-
-          while IFS= read -r f; do
-            [ -n "$f" ] && gh release upload latest "$f" --clobber
-          done < assets.txt
-
-      # 8) Créer la release sans assets si rien à publier (cas rare)
-      - name: Créer la release (sans fichiers)
-        if: steps.collate.outputs.files_count == '0'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create latest \
-            --title "Latest docs (main)" \
-            --notes-file RELEASE_NOTES.md
