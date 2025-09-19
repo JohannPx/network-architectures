@@ -130,25 +130,36 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
         run: |
-          set -euo pipefail
+          # Ne pas utiliser set -e pour gérer les erreurs manuellement
           
-          # Supprimer la release 'latest' si elle existe (avec le flag --cleanup-tag)
+          # Supprimer la release 'latest' si elle existe (sans --cleanup-tag d'abord)
+          echo "Checking for existing 'latest' release..."
           if gh release view latest >/dev/null 2>&1; then
-            echo "Deleting existing release 'latest' with cleanup..."
-            gh release delete latest -y --cleanup-tag
+            echo "Found existing release 'latest', deleting..."
+            gh release delete latest -y || echo "Warning: Could not delete release"
           else
-            echo "No existing 'latest' release."
+            echo "No existing 'latest' release found."
           fi
           
           # Attendre un peu pour s'assurer que GitHub a bien traité la suppression
           sleep 2
           
-          # Vérifier et supprimer la ref du tag au cas où
-          gh api \
-            --method DELETE \
-            -H "Accept: application/vnd.github+json" \
-            "/repos/${REPO}/git/refs/tags/latest" \
-            >/dev/null 2>&1 || echo "Tag ref 'latest' not found (ok)."
+          # Supprimer le tag 'latest' séparément s'il existe
+          echo "Checking for existing 'latest' tag..."
+          if git ls-remote --tags origin | grep -q "refs/tags/latest"; then
+            echo "Found existing tag 'latest', deleting..."
+            gh api \
+              --method DELETE \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${REPO}/git/refs/tags/latest" || echo "Warning: Could not delete tag"
+          else
+            echo "No existing 'latest' tag found."
+          fi
+          
+          # Alternative pour supprimer le tag via git
+          git push origin :refs/tags/latest 2>/dev/null || true
+          
+          echo "Cleanup complete, ready to create new release."
 
       # Préparer tous les assets dans un seul répertoire pour éviter les doublons
       - name: Prepare all assets
