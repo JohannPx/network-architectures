@@ -216,53 +216,230 @@ jobs:
           ls -la release-assets/
           echo "Total files: $(ls -1 release-assets/ | wc -l)"
 
-      # ✅ Génère une description lisible de la Release
+          # ✅ Génère une description orientée utilisateur final et métier
       - name: Build release body
         run: |
           set -euo pipefail
+          
+          # Fonction pour extraire le nom propre d'un fichier
+          extract_name() {
+            basename "$1" | sed 's/\.pdf$//' | sed 's/\.png$//' | sed 's/_mermaid.*$//'
+          }
+          
           {
-            echo "# Documentation – build sur main"
+            echo "# 📚 Documentation Solutions Industrielles - Clauger 3E"
             echo
-            echo "Cette Release *latest* contient les documents générés automatiquement à partir de \`docs/\` :"
+            echo "> **Guide rapide** : Téléchargez directement les PDF correspondant à votre besoin en cliquant sur les fichiers ci-dessous"
             echo
-            echo "## PDF disponibles"
-            if ls release-assets/*.pdf >/dev/null 2>&1; then
-              for f in release-assets/*.pdf; do
-                bn=$(basename "$f")
-                echo "- $bn"
-              done
+            echo "---"
+            echo
+            echo "## 🎯 Trouvez rapidement votre documentation"
+            echo
+            echo "### 🔌 **J'ai besoin de connecter des équipements à distance**"
+            echo "→ _Pour télémaintenance, modification de programmes automates, supervision_"
+            echo
+            echo "### 📊 **J'ai besoin de collecter des données terrain**"
+            echo "→ _Pour monitoring énergétique, suivi de production, IoT industriel_"
+            echo
+            echo "### 🎮 **J'ai besoin de piloter des équipements**"
+            echo "→ _Pour contrôle à distance, automatisation, gestion temps réel_"
+            echo
+            echo "---"
+            echo
+            
+            # Section Accès distant
+            echo "## 🔌 Solutions d'Accès Distant"
+            echo "_Permettre aux techniciens et automaticiens d'intervenir à distance sur vos installations_"
+            echo
+            if ls release-assets/*"Accès distant"*.pdf >/dev/null 2>&1; then
+              echo "| Document | Description | Cas d'usage |"
+              echo "|----------|-------------|-------------|"
+              
+              # HMS Ewon Talk2M
+              if ls release-assets/*"HMS Ewon Talk2M"*.pdf >/dev/null 2>&1; then
+                echo "| **HMS Ewon Talk2M** | Plateforme VPN industrielle avec passerelles Ewon Flexy/Cosy | ✓ Accès sécurisé aux automates<br>✓ Modification programmes API<br>✓ Visualisation IHM/SCADA<br>✓ Multi-sites, multi-utilisateurs |"
+              fi
+              
+              # VPN Client
+              if ls release-assets/*"Solution VPN client"*.pdf >/dev/null 2>&1; then
+                echo "| **Solution VPN client** | Connexion VPN directe site-à-site ou nomade | ✓ Accès direct au réseau client<br>✓ Utilisation outils métier<br>✓ Interventions ponctuelles |"
+              fi
+              
+              # Prise de main à distance
+              if ls release-assets/*"Prise de main à distance"*.pdf >/dev/null 2>&1; then
+                echo "| **Prise de main à distance** | Solutions TeamViewer, AnyDesk avec poste de rebond | ✓ Support rapide<br>✓ Formation utilisateur<br>✓ Diagnostic sans VPN |"
+              fi
             else
-              echo "_Aucun PDF généré._"
+              echo "_Aucune documentation d'accès distant disponible._"
             fi
             echo
-            echo "## PNG disponibles (diagrammes Mermaid)"
+            
+            # Section Collecte de données
+            echo "## 📊 Solutions de Collecte de Données"
+            echo "_Remonter et centraliser vos données industrielles vers MyPortal3E_"
+            echo
+            if ls release-assets/*"Collecte de données"*.pdf >/dev/null 2>&1; then
+              
+              # Énergies
+              echo "### ⚡ **Données Énergétiques**"
+              echo "| Document | Description | Points clés |"
+              echo "|----------|-------------|------------|"
+              
+              if ls release-assets/*"API GRDF"*.pdf >/dev/null 2>&1; then
+                echo "| **API GRDF ADICT** | Collecte consommations gaz via API GRDF | ✓ Données certifiées distributeur<br>✓ Historique 3-5 ans<br>✓ Courbes de charge |"
+              fi
+              
+              if ls release-assets/*"Enedis SGE"*.pdf >/dev/null 2>&1; then
+                echo "| **ENEDIS SGE** | Collecte consommations électriques Linky Pro | ✓ Index et courbes de charge<br>✓ Pas 10 min à 1h<br>✓ Données J+1 |"
+              fi
+              echo
+              
+              # IoT
+              echo "### 📡 **Solutions IoT Sans Fil**"
+              echo "| Document | Description | Points clés |"
+              echo "|----------|-------------|------------|"
+              
+              if ls release-assets/*"LoRaWAN public"*.pdf >/dev/null 2>&1; then
+                echo "| **LoRaWAN public** | Réseau Orange LiveObjects | ✓ Couverture nationale<br>✓ Capteurs batterie<br>✓ Coût mensuel/capteur |"
+              fi
+              
+              if ls release-assets/*"LoRaWAN privé"*.pdf >/dev/null 2>&1; then
+                echo "| **LoRaWAN privé** | Gateway LoRa sur site | ✓ Infrastructure privée<br>✓ Pas d'abonnement<br>✓ Contrôle total |"
+              fi
+              echo
+              
+              # Industriel
+              echo "### 🏭 **Solutions Industrielles**"
+              echo "| Document | Description | Protocoles/Équipements |"
+              echo "|----------|-------------|------------------------|"
+              
+              if ls release-assets/*"Datalogger"*.pdf >/dev/null 2>&1; then
+                echo "| **Datalogger** | Passerelle Ewon Flexy en mode collecte | ✓ Modbus TCP/RTU<br>✓ Siemens S7<br>✓ Allen Bradley<br>✓ BACnet |"
+              fi
+              
+              if ls release-assets/*"MCD"*.pdf >/dev/null 2>&1; then
+                echo "| **MCD (MyClaugerDetect)** | PC industriel Linux conteneurisé | ✓ Multi-protocoles<br>✓ Edge computing<br>✓ Traitement local<br>✓ MQTTS vers cloud |"
+              fi
+              
+              if ls release-assets/*"SCADA SFTP"*.pdf >/dev/null 2>&1; then
+                echo "| **SCADA SFTP** | Export depuis supervision existante | ✓ Compatible tout SCADA<br>✓ Export CSV planifié<br>✓ Script PowerShell |"
+              fi
+              
+              if ls release-assets/*"Echange par SFTP"*.pdf >/dev/null 2>&1; then
+                echo "| **Échange par SFTP** | Transfert de fichiers sécurisé | ✓ Import/Export CSV<br>✓ Bidirectionnel<br>✓ Planning flexible |"
+              fi
+            else
+              echo "_Aucune documentation de collecte disponible._"
+            fi
+            echo
+            
+            # Section Pilotage distant
+            echo "## 🎮 Solutions de Pilotage Distant"
+            echo "_Contrôler et automatiser vos équipements à distance_"
+            echo
+            if ls release-assets/*"Pilotage"*.pdf >/dev/null 2>&1; then
+              echo "| Document | Description | Fonctionnalités |"
+              echo "|----------|-------------|-----------------|"
+              for f in release-assets/*"Pilotage"*.pdf; do
+                name=$(extract_name "$f" | sed 's/Pilotage distant - //')
+                echo "| **$name** | Plateforme de pilotage temps réel via MyPortal3E | ✓ Contrôle-commande distant<br>✓ Scénarios automatisés<br>✓ Interface web responsive<br>✓ Historisation commandes |"
+              done
+            else
+              echo "_Aucune documentation de pilotage disponible._"
+            fi
+            echo
+            
+            # Section Documents légaux
+            if ls release-assets/*.docx >/dev/null 2>&1 || ls release-assets/*onsentement*.pdf >/dev/null 2>&1; then
+              echo "---"
+              echo
+              echo "## 📋 Documents Contractuels et Modèles"
+              echo "_Formulaires de consentement et documents légaux pour vos clients_"
+              echo
+              echo "| Document | Type | Usage |"
+              echo "|----------|------|-------|"
+              
+              if ls release-assets/*ENEDIS*.docx >/dev/null 2>&1 || ls release-assets/*ENEDIS*.pdf >/dev/null 2>&1; then
+                echo "| **Modèle consentement ENEDIS** | Word/PDF | Autorisation client pour collecte données électriques |"
+              fi
+              
+              if ls release-assets/*GRDF*.docx >/dev/null 2>&1 || ls release-assets/*GRDF*.pdf >/dev/null 2>&1; then
+                echo "| **Modèle consentement GRDF** | Word/PDF | Autorisation client pour collecte données gaz |"
+              fi
+              
+              if ls release-assets/*"Formulaire type"*.pdf >/dev/null 2>&1; then
+                echo "| **Formulaire type unifié** | PDF | Consentement multi-énergies (gaz + élec) |"
+              fi
+              echo
+            fi
+            
+            # Informations pratiques
+            echo "---"
+            echo
+            echo "## 🔧 Compatibilités Techniques"
+            echo
+            echo "### Automates supportés"
+            echo "- **Siemens** : S7-300/400/1200/1500 (ISO on TCP, S7 Protocol)"
+            echo "- **Schneider** : M340, M580, Premium (Modbus TCP)"
+            echo "- **Allen Bradley** : ControlLogix, CompactLogix (EtherNet/IP)"
+            echo "- **Omron** : CJ/CS/NJ/NX Series (FINS, EtherNet/IP)"
+            echo "- **Autres** : Tout automate Modbus TCP/RTU, OPC UA, BACnet"
+            echo
+            echo "### Passerelles et équipements"
+            echo "- **HMS Networks** : Ewon Flexy 205, Ewon Cosy 131"
+            echo "- **Secomea** : SiteManager, GateManager"
+            echo "- **Capteurs IoT** : LoRaWAN classe A/C, Sigfox"
+            echo "- **Compteurs** : Linky Pro (Enedis), Gazpar (GRDF)"
+            echo
+            echo "### Protocoles de communication"
+            echo "- **Terrain** : Modbus TCP/RTU, S7, OPC UA, BACnet, MQTT, DNP3, IEC 104"
+            echo "- **Cloud** : HTTPS REST API, MQTTS, WebSocket over TLS, SFTP"
+            echo
+            echo "---"
+            echo
+            echo "## 💡 Comment utiliser cette documentation ?"
+            echo
+            echo "1. **Identifiez votre besoin** dans les sections ci-dessus"
+            echo "2. **Téléchargez le(s) PDF** correspondant(s)"
+            echo "3. **Consultez les diagrammes PNG** pour vos présentations"
+            echo "4. **Utilisez les modèles Word** pour vos contrats clients"
+            echo
+            echo "### 📞 Support technique"
+            echo "- **Hotline** : Support Clauger 3E"
+            echo "- **Email** : assistantes_3E@clauger.fr"
+            echo "- **Expertise** : Automatisme, IoT, cybersécurité OT"
+            echo
+            
+            # Diagrammes disponibles (repliable)
             if ls release-assets/*.png >/dev/null 2>&1; then
+              echo "---"
+              echo
+              echo "## 🖼️ Diagrammes d'Architecture"
+              echo
+              echo "<details>"
+              echo "<summary>📐 Voir tous les schémas techniques disponibles (PNG)</summary>"
+              echo
+              echo "### Schémas disponibles pour vos présentations :"
               for f in release-assets/*.png; do
-                bn=$(basename "$f")
-                echo "- $bn"
+                name=$(extract_name "$f")
+                echo "- $name"
               done
-            else
-              echo "_Aucun PNG généré._"
+              echo
+              echo "</details>"
+              echo
             fi
+            
+            echo "---"
             echo
-            echo "## Documents Word"
-            if ls release-assets/*.docx >/dev/null 2>&1; then
-              for f in release-assets/*.docx; do
-                bn=$(basename "$f")
-                echo "- $bn"
-              done
-            else
-              echo "_Aucun document Word._"
-            fi
+            echo "## 🏷️ Mots-clés pour recherche rapide"
             echo
-            echo "## Utilisation"
-            echo "- Téléchargez directement les **PDF individuels** pour diffusion."
-            echo "- Les **PNG** sont les diagrammes Mermaid extraits et convertis."
-            echo "- Les documents légaux sont inclus s'ils sont présents dans \`docs/legal/\`."
+            echo "_VPN, Ewon, Talk2M, Secomea, télémaintenance, accès distant, SCADA, IoT, LoRaWAN, Modbus, Siemens S7, Allen Bradley, collecte données, monitoring, ENEDIS, GRDF, Linky, API, MQTT, MyPortal3E, MCD, datalogger, pilotage, automatisme, OT, cybersécurité, IEC 62443, NIS2_"
             echo
-            echo "> 💡 Astuce : pour une version figée, publiez un tag \`vX.Y.Z\` – une Release correspondante sera créée avec les mêmes assets."
+            echo "---"
             echo
-            echo "_Build automatique : $(date '+%Y-%m-%d %H:%M:%S UTC')_"
+            echo "_📅 Documentation mise à jour le $(date '+%d/%m/%Y à %H:%M') UTC_"
+            echo "_🔒 Solutions certifiées ISO 27001 - Conformité IEC 62443 & NIS2_"
+            echo "_🏢 © Clauger 3E - Solutions d'automatisme industriel secure by design_"
           } > release-body.md
 
       # ✅ Crée la nouvelle Release 'latest' avec tous les assets
