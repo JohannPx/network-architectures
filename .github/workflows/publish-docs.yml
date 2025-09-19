@@ -61,6 +61,31 @@ jobs:
           name: docs-png
           path: build/png/*.png
           if-no-files-found: warn
+
+      # Upload des documents legal s'ils existent
+      - name: Check and upload legal documents
+        run: |
+          if [ -d "docs/legal" ]; then
+            echo "Legal directory found, checking for documents..."
+            if ls docs/legal/*.pdf 2>/dev/null || ls docs/legal/*.docx 2>/dev/null; then
+              echo "Legal documents found"
+              # Créer un artifact pour les documents legal
+              mkdir -p build/legal
+              cp docs/legal/*.pdf build/legal/ 2>/dev/null || true
+              cp docs/legal/*.docx build/legal/ 2>/dev/null || true
+            else
+              echo "No legal documents found"
+            fi
+          else
+            echo "No legal directory found"
+          fi
+
+      - name: Upload legal documents
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-legal
+          path: build/legal/*
+          if-no-files-found: ignore
   
   release:
     name: Publish GitHub Release (latest on main)
@@ -75,6 +100,10 @@ jobs:
         shell: bash
 
     steps:
+      # Checkout pour avoir accès au repo (notamment docs/legal si nécessaire)
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Download PDFs
         uses: actions/download-artifact@v4
         with:
@@ -87,26 +116,94 @@ jobs:
           name: docs-png
           path: dist/png
 
-      # Supprimer proprement l’ancienne release/tag 'latest' avant recréation
-      - name: Remove previous 'latest' release & tag (idempotent)
+      # Télécharger les documents legal s'ils existent
+      - name: Download legal documents
+        uses: actions/download-artifact@v4
+        with:
+          name: docs-legal
+          path: dist/legal
+        continue-on-error: true  # Ne pas échouer si l'artifact n'existe pas
+
+      # Supprimer COMPLÈTEMENT l'ancienne release/tag 'latest' avant recréation
+      - name: Delete existing latest release completely
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          # Supprimer la release 'latest' si elle existe
+          
+          # Supprimer la release 'latest' si elle existe (avec le flag --cleanup-tag)
           if gh release view latest >/dev/null 2>&1; then
-            echo "Deleting existing release 'latest'…"
-            gh release delete latest -y
+            echo "Deleting existing release 'latest' with cleanup..."
+            gh release delete latest -y --cleanup-tag
           else
             echo "No existing 'latest' release."
           fi
-          # Supprimer la ref du tag 'latest' côté serveur (si elle existe)
+          
+          # Attendre un peu pour s'assurer que GitHub a bien traité la suppression
+          sleep 2
+          
+          # Vérifier et supprimer la ref du tag au cas où
           gh api \
             --method DELETE \
             -H "Accept: application/vnd.github+json" \
             "/repos/${REPO}/git/refs/tags/latest" \
             >/dev/null 2>&1 || echo "Tag ref 'latest' not found (ok)."
+
+      # Préparer tous les assets dans un seul répertoire pour éviter les doublons
+      - name: Prepare all assets
+        run: |
+          set -euo pipefail
+          
+          # Créer un répertoire pour tous les assets
+          mkdir -p release-assets
+          
+          # Copier les PDFs générés
+          if [ -d "dist/pdf" ] && ls dist/pdf/*.pdf >/dev/null 2>&1; then
+            echo "Copying PDF files..."
+            cp dist/pdf/*.pdf release-assets/
+          fi
+          
+          # Copier les PNGs générés
+          if [ -d "dist/png" ] && ls dist/png/*.png >/dev/null 2>&1; then
+            echo "Copying PNG files..."
+            cp dist/png/*.png release-assets/
+          fi
+          
+          # Copier les documents legal depuis l'artifact téléchargé
+          if [ -d "dist/legal" ] && ls dist/legal/* >/dev/null 2>&1; then
+            echo "Copying legal documents from artifact..."
+            cp dist/legal/* release-assets/ 2>/dev/null || true
+          fi
+          
+          # Ou copier directement depuis docs/legal si présent dans le checkout
+          if [ -d "docs/legal" ]; then
+            echo "Checking for legal documents in repo..."
+            if ls docs/legal/*.pdf >/dev/null 2>&1; then
+              for f in docs/legal/*.pdf; do
+                bn=$(basename "$f")
+                if [ ! -f "release-assets/$bn" ]; then
+                  echo "Adding legal PDF: $bn"
+                  cp "$f" release-assets/
+                fi
+              done
+            fi
+            if ls docs/legal/*.docx >/dev/null 2>&1; then
+              for f in docs/legal/*.docx; do
+                bn=$(basename "$f")
+                if [ ! -f "release-assets/$bn" ]; then
+                  echo "Adding legal DOCX: $bn"
+                  cp "$f" release-assets/
+                fi
+              done
+            fi
+          fi
+          
+          # Lister tous les fichiers pour vérification
+          echo ""
+          echo "=== All assets to be uploaded ==="
+          ls -la release-assets/
+          echo "Total files: $(ls -1 release-assets/ | wc -l)"
 
       # ✅ Génère une description lisible de la Release
       - name: Build release body
@@ -118,8 +215,8 @@ jobs:
             echo "Cette Release *latest* contient les documents générés automatiquement à partir de \`docs/\` :"
             echo
             echo "## PDF disponibles"
-            if compgen -G "dist/pdf/*.pdf" > /dev/null; then
-              for f in dist/pdf/*.pdf; do
+            if ls release-assets/*.pdf >/dev/null 2>&1; then
+              for f in release-assets/*.pdf; do
                 bn=$(basename "$f")
                 echo "- $bn"
               done
@@ -127,9 +224,9 @@ jobs:
               echo "_Aucun PDF généré._"
             fi
             echo
-            echo "## PNG disponibles (diagrammes)"
-            if compgen -G "dist/png/*.png" > /dev/null; then
-              for f in dist/png/*.png; do
+            echo "## PNG disponibles (diagrammes Mermaid)"
+            if ls release-assets/*.png >/dev/null 2>&1; then
+              for f in release-assets/*.png; do
                 bn=$(basename "$f")
                 echo "- $bn"
               done
@@ -137,26 +234,92 @@ jobs:
               echo "_Aucun PNG généré._"
             fi
             echo
+            echo "## Documents Word"
+            if ls release-assets/*.docx >/dev/null 2>&1; then
+              for f in release-assets/*.docx; do
+                bn=$(basename "$f")
+                echo "- $bn"
+              done
+            else
+              echo "_Aucun document Word._"
+            fi
+            echo
             echo "## Utilisation"
             echo "- Téléchargez directement les **PDF individuels** pour diffusion."
-            echo "- Les **PNG** sont attachés individuellement (pas besoin de dézipper)."
+            echo "- Les **PNG** sont les diagrammes Mermaid extraits et convertis."
+            echo "- Les documents légaux sont inclus s'ils sont présents dans \`docs/legal/\`."
             echo
-            echo "> Astuce : pour une version figée, publiez un tag \`vX.Y.Z\` — une Release correspondante sera créée avec les mêmes assets."
+            echo "> 💡 Astuce : pour une version figée, publiez un tag \`vX.Y.Z\` – une Release correspondante sera créée avec les mêmes assets."
+            echo
+            echo "_Build automatique : $(date '+%Y-%m-%d %H:%M:%S UTC')_"
           } > release-body.md
 
-      # ✅ Crée la nouvelle Release 'latest' + upload des assets individuels
+      # ✅ Crée la nouvelle Release 'latest' avec tous les assets
       - name: Create rolling release (latest) with assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
           name: Latest docs (main)
           prerelease: false
-          generate_release_notes: true
+          generate_release_notes: false  # Désactivé car on a notre propre body
           body_path: release-body.md
-          files: |
-            dist/pdf/*.pdf
-            dist/png/*.png
-            docs/legal/*.pdf
-            docs/legal/*.docx
+          files: release-assets/*
+          fail_on_unmatched_files: false  # Important : ne pas échouer si un pattern ne matche pas
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Job optionnel pour les releases versionnées (tags v*)
+  release-version:
+    name: Publish versioned release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download PDFs
+        uses: actions/download-artifact@v4
+        with:
+          name: docs-pdf
+          path: dist/pdf
+
+      - name: Download PNGs
+        uses: actions/download-artifact@v4
+        with:
+          name: docs-png
+          path: dist/png
+
+      - name: Download legal documents
+        uses: actions/download-artifact@v4
+        with:
+          name: docs-legal
+          path: dist/legal
+        continue-on-error: true
+
+      # Préparer tous les assets
+      - name: Prepare all assets
+        run: |
+          mkdir -p release-assets
+          cp dist/pdf/*.pdf release-assets/ 2>/dev/null || true
+          cp dist/png/*.png release-assets/ 2>/dev/null || true
+          cp dist/legal/* release-assets/ 2>/dev/null || true
+          
+          # Ajouter les documents depuis docs/legal si présents
+          if [ -d "docs/legal" ]; then
+            cp docs/legal/*.pdf release-assets/ 2>/dev/null || true
+            cp docs/legal/*.docx release-assets/ 2>/dev/null || true
+          fi
+
+      - name: Create versioned release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Documentation ${{ github.ref_name }}
+          generate_release_notes: true
+          files: release-assets/*
+          fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
