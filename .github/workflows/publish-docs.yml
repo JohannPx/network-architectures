@@ -10,6 +10,10 @@ concurrency:
   group: publish-docs-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  TEXLIVE_VERSION: '2023'
+  PYTHON_VERSION: '3.11'
+
 jobs:
   build:
     name: Build PDFs & PNGs
@@ -19,21 +23,45 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Cache TeX Live (le plus gros gain de performance)
+      - name: Cache TeX Live
+        uses: actions/cache@v3
+        id: cache-texlive
+        with:
+          path: |
+            /usr/share/texlive
+            /usr/share/texmf
+            ~/.texlive${{ env.TEXLIVE_VERSION }}
+          key: ${{ runner.os }}-texlive-${{ env.TEXLIVE_VERSION }}-full
+          restore-keys: |
+            ${{ runner.os }}-texlive-${{ env.TEXLIVE_VERSION }}-
+
       # Pandoc + TeX Live pour LuaLaTeX
       - name: Install Pandoc & TeX Live
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            pandoc \
-            texlive-luatex texlive-latex-recommended texlive-latex-extra \
-            texlive-fonts-recommended texlive-fonts-extra \
-            texlive-plain-generic lmodern
+          # Pandoc est rapide, on l'installe toujours
+          sudo apt-get update && sudo apt-get install -y pandoc
+          
+          # TeX Live seulement si pas en cache
+          if [[ "${{ steps.cache-texlive.outputs.cache-hit }}" != "true" ]]; then
+            echo "Installing TeX Live (this will take a few minutes)..."
+            sudo apt-get install -y \
+              texlive-luatex texlive-latex-recommended texlive-latex-extra \
+              texlive-fonts-recommended texlive-fonts-extra \
+              texlive-plain-generic lmodern
+          else
+            echo "✅ TeX Live loaded from cache"
+          fi
 
-      # Python pour exécuter scripts/process.py
+      # Python avec cache pip automatique
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: |
+            scripts/requirements.txt
+            .github/workflows/publish-docs.yml
 
       - name: Install Python deps
         run: |
@@ -44,9 +72,27 @@ jobs:
             python -m pip install requests
           fi
 
+      # Cache optionnel pour les builds (si vos docs changent peu souvent)
+      - name: Cache build outputs
+        uses: actions/cache@v3
+        id: cache-build
+        with:
+          path: build/
+          key: build-${{ hashFiles('docs/**/*.md', 'scripts/process.py') }}
+          restore-keys: |
+            build-
+
       - name: Build (PNG + PDF)
+        if: steps.cache-build.outputs.cache-hit != 'true'
         run: |
           python scripts/process.py --docs docs --out build
+      
+      - name: Use cached build
+        if: steps.cache-build.outputs.cache-hit == 'true'
+        run: |
+          echo "✅ Using cached build outputs (no changes detected in docs)"
+          ls -la build/pdf/ || true
+          ls -la build/png/ || true
 
       - name: Upload PDFs
         uses: actions/upload-artifact@v4
@@ -54,6 +100,7 @@ jobs:
           name: docs-pdf
           path: build/pdf/*.pdf
           if-no-files-found: error
+          retention-days: 1  # Réduit pour économiser l'espace
 
       - name: Upload PNGs
         uses: actions/upload-artifact@v4
@@ -61,8 +108,9 @@ jobs:
           name: docs-png
           path: build/png/*.png
           if-no-files-found: warn
+          retention-days: 1
 
-      # Upload des documents legal s'ils existent
+      # Upload des documents legal s'ils existent (votre code existant)
       - name: Check and upload legal documents
         run: |
           if [ -d "docs/legal" ]; then
@@ -86,6 +134,7 @@ jobs:
           name: docs-legal
           path: build/legal/*
           if-no-files-found: ignore
+          retention-days: 1
   
   release:
     name: Publish GitHub Release (latest on main)
@@ -103,6 +152,10 @@ jobs:
       # Checkout pour avoir accès au repo (notamment docs/legal si nécessaire)
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github
+            docs/legal
 
       - name: Download PDFs
         uses: actions/download-artifact@v4
@@ -250,6 +303,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github
+            docs/legal
 
       - name: Download PDFs
         uses: actions/download-artifact@v4
