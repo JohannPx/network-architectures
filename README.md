@@ -1,74 +1,175 @@
-# Network Architectures (Mermaid)
+# 📚 Documentation Architectures Industrielles OT/IT
 
-Ce dépôt contient des **schémas d’architectures réseaux OT/IT** écrits en **Markdown + Mermaid**, puis exportés automatiquement en **PNG** et **PDF**.
+> **Référentiel centralisé** des architectures et solutions d'automatisme industriel **secure by design** de Clauger
 
----
-
-## Pourquoi utiliser GitHub ?
-Nous utilisons GitHub comme **bibliothèque centralisée de schémas** et outil de collaboration :
-- Historique complet des modifications (qui / quand / quoi).
-- Travail à plusieurs sans écraser le travail des autres (pull requests).
-- Génération **automatique** des PNG et PDF lors des builds.
-- Partage simple : les fichiers finaux sont disponibles dans la **Release “latest”**.
+[![Latest Release](https://img.shields.io/github/v/release/JohannPx/network-architectures?label=latest&style=flat-square)](../../releases/latest)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/JohannPx/network-architectures/publish-docs.yml?branch=main&style=flat-square)](../../actions)
+[![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 
 ---
 
-## Pourquoi Markdown + Mermaid ?
-Les fichiers `.md` contiennent le **code Mermaid** qui décrit les diagrammes.  
-Avantages :
-- **Édition simple** : on modifie du texte, pas un dessin binaire.
-- **Automatisation** : export en PNG/PDF sans retouche manuelle.
-- **Interopérabilité** : une IA peut **lire et raisonner** sur ces descriptions textuelles.
-- **Pérennité** : le format texte reste lisible et diffable.
+## 🎯 Objectif
 
-Exemple minimal Mermaid :
+Ce dépôt centralise les **architectures de référence** pour nos solutions industrielles :
+- **Accès distant sécurisé** pour télémaintenance et support
+- **Collecte de données** terrain (IoT, énergies, SCADA)
+- **Pilotage à distance** d'équipements industriels
+- **Modèles contractuels** (consentements GDPR pour données énergétiques)
 
-~~~mermaid
-graph TD
-  A[Poste utilisateur] -->|VPN| B[Firewall]
-  B --> C[Automate/PLC]
-~~~
+Les documents servent de **base réutilisable** pour accélérer les **déclinaisons projets clients** tout en garantissant la **conformité sécurité** (ISO 27001, IEC 62443, NIS2).
 
 ---
 
-## Objectif du dépôt
-Conserver nos **architectures “standard” / “de base”** (Remote Access, Data, etc.) pour servir de **socle réutilisable** et accélérer la déclinaison **pour les projets clients**.  
-Les documents intègrent des **rappels de sécurité** inspirés de **IEC 62443** (zones & conduites) et **NIS 2** (cybersécurité OT/IT).
+## 📁 Organisation
+
+```
+docs/
+├── remote-access/          # Solutions d'accès distant
+│   ├── ...
+│
+├── data/                   # Solutions de collecte de données
+│   ├── ...
+│
+├── control/                # Solutions de pilotage
+│   └── ...
+│
+└── legal/                  # Documents contractuels
+    ├── Consentement-ENEDIS.*     # Modèles Word/PDF
+    ├── Consentement-GRDF.*       # Modèles Word/PDF
+    └── Formulaire-type.pdf       # Multi-énergies
+```
 
 ---
 
-## Organisation
-- `docs/remote-access` : variantes d’accès distant (Ewon, VPN client, PMAD, …)
-- `docs/data` : variantes de collecte / transfert de données (Ewon datalogger, myClaugerDetect, SCADA, …)
+## 🚀 Utilisation
 
-Pour chaque `.md`, la CI publie :
-- un **PNG** (aperçu visuel),
-- un **PDF** (document prêt à partager).
+### Consulter les schémas
 
----
+#### Option 1 : Directement sur GitHub
+Les fichiers `.md` avec code Mermaid sont rendus automatiquement dans l'interface GitHub.
 
-## Comment consulter / utiliser
-- Ouvrez les `.md` directement sur GitHub, dans **VS Code** (extension *Mermaid*), ou via **Mermaid Live Editor** : https://mermaid.live
-- Récupérez les **PDF et PNG générés** dans la **dernière Release** : **[Releases › Latest](../../releases/latest)**.
-- Pour une version figée (ex. livraison client), créez un **tag** `vX.Y.Z` ; une Release versionnée sera publiée automatiquement avec les mêmes assets.
+#### Option 2 : Dans votre éditeur
+- **VS Code** : Extension [Markdown Preview Mermaid Support](https://marketplace.visualstudio.com/items?itemName=bierner.markdown-mermaid)
+- **Mermaid Live Editor** : https://mermaid.live
 
----
+#### Option 3 : Documents générés
+Téléchargez les **PDF et PNG** depuis la **[📥 Dernière Release](../../releases/latest)**
 
-## Notes sécurité dans les PDF
-Les PDF rappellent des principes de base (exemples) :
-- **Segmentation** par zones / conduites (IEC 62443) et filtrage inter-zones (pare-feu).
-- **Accès distant** : authentification forte, principe du moindre privilège, journalisation.
-- **Collecte de données** : flux sortants maîtrisés, chiffrement en transit, réduction de surface d’attaque.
-Ces schémas sont des **modèles génériques** : ils doivent être **revus et adaptés** à chaque contexte client.
+### Pour les projets clients
+
+1. **Téléchargez** les PDF/PNG depuis la release
+2. **Adaptez** selon le contexte spécifique du client
+3. **Validez** les aspects sécurité avec l'équipe cybersécurité
+4. **Versionnez** avec un tag `vX.Y.Z` pour traçabilité
 
 ---
 
-## Contribution
-- Proposez vos changements via **pull request** (PR).
-- Privilégiez un **schéma par fichier `.md`**.
-- Ajoutez un court **contexte** en tête de fichier (objectif, périmètre, dépendances).
+## 🔧 Technologies & Standards
+
+### Format des schémas
+- **Markdown + Mermaid** : Descriptions textuelles versionnables
+- **Export automatique** : PNG (présentations) + PDF (documentation)
+- **CI/CD** : GitHub Actions pour génération automatique
+
+### Exemple de diagramme Mermaid
+
+```mermaid
+flowchart LR
+    remote([💻 PC distant])
+    talk2m((☁️ Talk2M))
+    ewon[🖴 Ewon Flexy]
+    plc([📟 API])
+    
+    remote == 🔒 VPN ==> talk2m
+    talk2m == 🔒 VPN ==> ewon
+    ewon === plc
+    
+    style talk2m fill:#f9f,stroke:#333,stroke-width:2px
+```
+
+### Normes de sécurité intégrées
+
+- **ISO 27001** : Système de management de la sécurité
+- **IEC 62443** : Cybersécurité des systèmes industriels
+- **NIS2** : Directive européenne sur la cybersécurité
+- **RGPD** : Protection des données personnelles
 
 ---
 
-## Licence
-MIT (sauf mention contraire).
+## 🤝 Contribution
+
+### Processus
+
+1. **Créez une branche** : `feature/nouvelle-architecture`
+2. **Ajoutez/modifiez** les fichiers `.md` avec Mermaid
+3. **Documentez** : Contexte, cas d'usage, considérations sécurité
+4. **Soumettez une PR** : Review par l'équipe
+
+### Conventions
+
+- **Un schéma = un fichier** pour faciliter la maintenance
+- **Nomenclature** : `Solution-Variante.md` (ex: `Accès-distant-Ewon.md`)
+- **Structure** : Architecture → Description → Sécurité → Flux réseau
+- **Emojis** : Pour la lisibilité (📟 API, 🔒 Sécurisé, ☁️ Cloud, etc.)
+
+### Tests locaux
+
+```bash
+# Installation des dépendances
+npm install -g @mermaid-js/mermaid-cli
+
+# Génération locale des PNG
+mmdc -i docs/remote-access/HMS-Ewon-Talk2M.md -o test.png
+
+# Vérification des markdown
+markdownlint docs/**/*.md
+```
+
+---
+
+## 📊 Automatisation CI/CD
+
+Le workflow GitHub Actions (`publish-docs.yml`) :
+1. **Détecte** les modifications sur `main`
+2. **Extrait** les diagrammes Mermaid
+3. **Génère** PNG (diagrammes) + PDF (documents complets)
+4. **Publie** une release `latest` mise à jour automatiquement
+
+Pour une version figée : créez un tag `vX.Y.Z` → release versionnée automatique
+
+---
+
+## 🔐 Sécurité & Conformité
+
+### Principes appliqués
+
+- **Segmentation réseau** : Zones et conduites (IEC 62443)
+- **Authentification forte** : MFA, certificats, API keys
+- **Chiffrement** : TLS/MQTTS pour tous les flux
+- **Principe du moindre privilège** : Accès limités au strict nécessaire
+- **Journalisation** : Traçabilité complète des accès
+- **Defense in depth** : Couches de sécurité multiples
+
+### ⚠️ Important
+
+Ces architectures sont des **modèles génériques** qui doivent être :
+- **Analysés** selon le contexte spécifique du client
+- **Validés** par l'équipe cybersécurité
+- **Adaptés** aux contraintes métier et réglementaires
+- **Testés** avant mise en production
+
+---
+
+## 📄 Licence
+
+MIT - Voir [LICENSE](LICENSE) pour plus de détails.
+
+Les marques mentionnées (Ewon, Talk2M, etc.) appartiennent à leurs propriétaires respectifs.
+
+---
+
+<div align="center">
+
+**[🏠 Clauger](https://www.clauger.com)** | **[📥 Télécharger les docs](../../releases/latest)** | **[🐛 Signaler un bug](../../issues)**
+
+</div>
