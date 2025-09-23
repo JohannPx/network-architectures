@@ -34,5 +34,5 @@ Cette solution est **sécurisée de bout en bout** :
 - **HTTPS/TLS** assure la protection des flux entre Datalink et MyPortal3E.  
 - Les flux sont gouvernés et tracés, et seuls les clients ayant donné leur consentement peuvent être intégrés dans le dispositif.  
 
-👉 Pour plus d’informations techniques et fonctionnelles, voir la documentation officielle Enedis :  
+Pour plus d’informations techniques et fonctionnelles, voir la documentation officielle Enedis :  
 [Portail DataHub Enedis](https://datahub-enedis.fr/)

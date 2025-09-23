@@ -1,3 +1,13 @@
+---
+header-includes: |
+  \usepackage{fancyhdr}
+  \usepackage{graphicx}
+  \pagestyle{fancy}
+  \lhead{\includegraphics[height=1cm]{.github/templates/logo-clauger.png}}
+  \lfoot{Clauger - Solutions Industrielles}
+  \rfoot{Page \thepage}
+---
+
 # Accès distant - HMS Ewon Talk2M
 
 ## Architecture

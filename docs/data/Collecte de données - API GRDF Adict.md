@@ -27,4 +27,4 @@ Les données concernées sont les consommations publiées (utilisées pour la fa
 Cette architecture garantit une **chaîne sécurisée de bout en bout** : du recueil du consentement, à la collecte des données par l’API, jusqu’à leur restitution dans MyPortal3E.  
 
 Pour plus d’informations techniques et fonctionnelles, voir la documentation officielle GRDF :  
-👉 [Portail API GRDF ADICT](https://sites.grdf.fr/web/portail-api-grdf-adict)
+[Portail API GRDF ADICT](https://sites.grdf.fr/web/portail-api-grdf-adict)
