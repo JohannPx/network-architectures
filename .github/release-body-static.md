@@ -1,6 +1,9 @@
 # 📚 Documentation Solutions Industrielles - Clauger
+# 📚 Industrial Solutions Documentation - Clauger
 
 > **Guide rapide** : Téléchargez directement les PDF correspondant à votre besoin depuis les assets ci-dessous
+>
+> **Quick guide**: Download the PDF files directly from the assets below according to your needs
 
 ---
 
@@ -42,11 +45,15 @@
 
 ---
 
-## 💡 Utilisation
+## 💡 Utilisation / Usage
 
-1. **Téléchargez les PDF** directement depuis les assets
-2. **Consultez les diagrammes PNG** pour vos présentations
-3. **Utilisez les modèles Word** pour vos contrats clients
+| Français | English |
+|----------|---------|
+| Téléchargez les PDF directement depuis les assets | Download PDF files directly from the assets |
+| Consultez les diagrammes PNG pour vos présentations | Use PNG diagrams for your presentations |
+| Utilisez les modèles Word pour vos contrats clients | Use Word templates for your client contracts |
+
+> **Note**: Documents are available in **French (FR)** and **English (EN)**. English file names start with "Data collection", "Remote access", or "Remote control".
 
 ---
 

@@ -124,7 +124,14 @@ def run_pandoc(input_md: Path, output_pdf: Path, resource_path: Path, title: str
     subprocess.run(cmd, check=True)
 
 
-def process_all(docs_dir: Path, build_dir: Path):
+def process_all(docs_dir: Path, build_dir: Path, exclude_dirs: list[str] = None):
+    """
+    Traite tous les fichiers .md dans docs_dir et génère les PDFs.
+    exclude_dirs: liste de noms de dossiers à exclure (ex: ["en"] pour FR)
+    """
+    if exclude_dirs is None:
+        exclude_dirs = []
+
     png_dir = build_dir / "png"
     temp_dir = build_dir / "temp"
     pdf_dir = build_dir / "pdf"
@@ -132,6 +139,14 @@ def process_all(docs_dir: Path, build_dir: Path):
     ensure_dirs(png_dir, temp_dir, pdf_dir)
 
     md_files = sorted(docs_dir.rglob("*.md"))
+
+    # Filtrer les fichiers dans les dossiers exclus
+    if exclude_dirs:
+        md_files = [
+            f for f in md_files
+            if not any(excl in f.relative_to(docs_dir).parts for excl in exclude_dirs)
+        ]
+
     if not md_files:
         print(f"Aucun .md trouvé dans {docs_dir}")
         return
@@ -179,13 +194,21 @@ def main():
                     help="Dossier des sources .md")
     ap.add_argument("--out",  default="build", type=str,
                     help="Dossier de sortie (png/temp/pdf)")
+    ap.add_argument("--lang", default="fr", choices=["fr", "en"],
+                    help="Langue de la documentation (fr ou en)")
     args = ap.parse_args()
 
     docs_dir = Path(args.docs).resolve()
     build_dir = Path(args.out).resolve()
 
+    # Pour la langue anglaise, exclure le dossier 'en' si on traite docs/
+    # et exclure le dossier 'legal' (documents contractuels FR uniquement)
+    exclude_dirs = []
+    if args.lang == "fr":
+        exclude_dirs = ["en"]
+
     try:
-        process_all(docs_dir, build_dir)
+        process_all(docs_dir, build_dir, exclude_dirs=exclude_dirs)
     except subprocess.CalledProcessError as e:
         print("Erreur d'exécution Pandoc:", e, file=sys.stderr)
         sys.exit(e.returncode or 1)
